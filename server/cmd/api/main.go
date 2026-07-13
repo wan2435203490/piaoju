@@ -54,7 +54,7 @@ func run(log *slog.Logger) error {
 
 	srv := &http.Server{
 		Addr:              cfg.HTTPAddr,
-		Handler:           newRouter(conn, token.NewManager(cfg.JWTSecret)),
+		Handler:           newRouter(conn, token.NewManager(cfg.JWTSecret), cfg),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      60 * time.Second,

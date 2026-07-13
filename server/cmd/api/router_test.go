@@ -12,13 +12,15 @@ import (
 	"testing"
 	"time"
 
+	"piaoju/internal/platform/config"
 	"piaoju/internal/platform/token"
 )
 
 func newTestServer(t *testing.T) (*httptest.Server, *token.Manager) {
 	t.Helper()
 	tm := token.NewManager("router-test-secret")
-	srv := httptest.NewServer(newRouter(nil, tm))
+	cfg := config.Config{JWTSecret: "router-test-secret", UploadDir: t.TempDir(), UploadMaxMB: 10}
+	srv := httptest.NewServer(newRouter(nil, tm, cfg))
 	t.Cleanup(srv.Close)
 	return srv, tm
 }

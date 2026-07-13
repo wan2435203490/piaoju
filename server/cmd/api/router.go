@@ -6,18 +6,22 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"piaoju/internal/auth"
+	"piaoju/internal/category"
 	"piaoju/internal/middleware"
+	"piaoju/internal/platform/config"
 	"piaoju/internal/platform/httpx"
 	"piaoju/internal/platform/token"
+	"piaoju/internal/stats"
+	"piaoju/internal/ticket"
+	"piaoju/internal/transaction"
+	"piaoju/internal/upload"
 )
 
-// newRouter 组装全局中间件与路由骨架。
-//
-// S2-S5 模块挂载方式：在下方两个「挂载点」注释处各加一行 Mount/Get 即可，
-// 模块构造器需要的 *sql.DB / *token.Manager 从本函数入参接线。
-func newRouter(conn *sql.DB, tm *token.Manager) http.Handler {
-	_ = conn // 现阶段仅透传给后续模块构造器（S2-S5）使用
-
+// newRouter 组装全局中间件与业务模块路由。
+// 各模块构造器签名见其 handler.go 的 Routes 文档注释；
+// ticket/upload/Serve 必须共用同一签名密钥（cfg.JWTSecret）。
+func newRouter(conn *sql.DB, tm *token.Manager, cfg config.Config) http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestLog)
 	r.Use(middleware.Recover)
@@ -29,10 +33,10 @@ func newRouter(conn *sql.DB, tm *token.Manager) http.Handler {
 	})
 
 	r.Route("/api/v1", func(api chi.Router) {
-		// ── 公开路由挂载点（不挂 Auth；仅 S2 的 /auth/* 允许放这里）─────────
-		// S2 示例: api.Mount("/auth", auth.Routes(authSvc))
+		// 公开路由（不挂 Auth）
+		api.Mount("/auth", auth.Routes(conn, tm, cfg.AccessTTL, cfg.RefreshTTL))
 
-		// ── 认证路由：统一挂 Auth，handler 内用 middleware.UID(ctx) 取 userID ──
+		// 认证路由：统一挂 Auth，handler 内用 middleware.UID(ctx) 取 userID
 		api.Group(func(sec chi.Router) {
 			sec.Use(middleware.Auth(tm))
 
@@ -41,17 +45,17 @@ func newRouter(conn *sql.DB, tm *token.Manager) http.Handler {
 				httpx.OK(w, map[string]any{"pong": true, "uid": middleware.UID(r.Context())})
 			})
 
-			// ── 业务模块挂载点（S3/S4/S5 在此追加）────────────────────────
-			// S3 示例: sec.Mount("/transactions", transaction.Routes(txSvc))
-			//          sec.Mount("/stats", stats.Routes(statsSvc))
-			// S4 示例: sec.Mount("/tickets", ticket.Routes(ticketSvc))
-			//          sec.Mount("/uploads", upload.Routes(uploadSvc))
-			// S5 示例: sec.Mount("/sync", syncmod.Routes(syncSvc))
+			sec.Mount("/categories", category.Routes(conn))
+			sec.Mount("/transactions", transaction.Routes(conn))
+			sec.Mount("/stats", stats.Routes(conn))
+			sec.Mount("/tickets", ticket.Routes(conn, cfg.JWTSecret))
+			sec.Mount("/uploads", upload.Routes(conn, cfg.UploadDir, cfg.UploadMaxMB, cfg.JWTSecret))
+			// S5 sync 模块 M3 接入：sec.Mount("/sync", syncmod.Routes(syncSvc))
 		})
 	})
 
-	// S4 注意：契约 §6 的静态文件 GET /uploads/{path}（带签名参数）挂在根路由，
-	// 不在 /api/v1 下、不挂 Auth：r.Get("/uploads/*", upload.Serve(...))
+	// 契约 §6：签名 URL 静态文件，不在 /api/v1 下、不挂 Auth。
+	r.Get("/uploads/*", upload.Serve(cfg.UploadDir, cfg.JWTSecret))
 
 	return r
 }
