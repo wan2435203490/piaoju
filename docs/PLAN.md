@@ -31,9 +31,9 @@
 ## Wave 0 — 地基（主线程，串行，0.5 天）
 
 - [x] 契约 PROTOCOL.md、两个项目 skill
-- [ ] T0.1 repo init：目录骨架、Makefile（dev/lint/test/build）、docker-compose（mysql8 + api）、.env.example、CI（lint+test+bundle-size 门禁）
-- [ ] T0.2 迁移 0001-0003（users/refresh_tokens/categories+seed、transactions、tickets/attachments）——迁移先行，S2-S4 只消费不建表
-- [ ] T0.3 UI mockup 3 版（Artifact 预览）→ 用户定稿 → 回写 design skill tokens
+- [x] T0.1 repo init：目录骨架、Makefile（dev/lint/test/build）、docker-compose（mysql8 + api）、.env.example、CI（lint+test+bundle-size 门禁）
+- [x] T0.2 迁移 0001-0003（users/refresh_tokens/categories+seed、transactions、tickets/attachments）——迁移先行，S2-S4 只消费不建表
+- [ ] T0.3 UI mockup 3 版（Artifact 预览）→ 用户定稿 → 回写 design skill tokens（tokens 初版已在 design skill；mockup 定稿待用户）
 
 ## Wave 1 — 双骨架（2 agent 并行，≈1 天）
 
