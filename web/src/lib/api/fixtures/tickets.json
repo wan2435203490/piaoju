@@ -1,0 +1,128 @@
+[
+	{
+		"id": "5cae4524-f800-4ac5-b481-09410cab1a59",
+		"kind": "movie",
+		"title": "沙丘 3",
+		"venue": "万达影城（CBD 万达广场店）",
+		"eventTime": "2026-07-11T11:30:00Z",
+		"seat": "9排12座",
+		"extra": {
+			"cinema": "万达影城（CBD 万达广场店）",
+			"hall": "IMAX 激光厅",
+			"filmFormat": "IMAX 2D"
+		},
+		"rating": 5,
+		"memo": "视效炸裂，沙虫骑乘一镜到底，比第二部还好",
+		"transaction": {
+			"id": "963769e2-a803-4080-a78e-a0b010a56c0f",
+			"amountCents": 9900,
+			"categoryId": 5,
+			"paymentMethod": "wechat"
+		},
+		"attachments": [],
+		"createdAt": "2026-07-11T11:35:00Z",
+		"updatedAt": "2026-07-11T15:02:00Z"
+	},
+	{
+		"id": "2a12503f-6c03-4e00-a2ec-0ff7940e038e",
+		"kind": "train",
+		"title": "G102 杭州东 → 北京南",
+		"venue": "杭州东站",
+		"eventTime": "2026-07-08T01:03:00Z",
+		"seat": "06车12F",
+		"extra": {
+			"trainNo": "G102",
+			"fromStation": "杭州东",
+			"toStation": "北京南",
+			"departTime": "2026-07-08T01:03:00Z",
+			"arriveTime": "2026-07-08T05:27:00Z",
+			"seatClass": "二等座"
+		},
+		"rating": 0,
+		"memo": "",
+		"transaction": {
+			"id": "529802a3-efaf-4443-8319-b57ddb57aa62",
+			"amountCents": 62300,
+			"categoryId": 3,
+			"paymentMethod": "alipay"
+		},
+		"attachments": [],
+		"createdAt": "2026-07-07T12:40:00Z",
+		"updatedAt": "2026-07-07T12:40:00Z"
+	},
+	{
+		"id": "7cedf256-0792-4286-ac8e-574162ccf614",
+		"kind": "attraction",
+		"title": "灵隐寺（飞来峰景区）",
+		"venue": "杭州·灵隐景区",
+		"eventTime": "2026-07-05T01:30:00Z",
+		"seat": "",
+		"extra": {
+			"city": "杭州",
+			"ticketType": "成人票（含飞来峰）"
+		},
+		"rating": 4,
+		"memo": "赶了个早香，山里比市区凉快，飞来峰造像值得慢慢看",
+		"transaction": {
+			"id": "5e10727c-f1aa-4dc2-bc8c-80e9b0b4d4b3",
+			"amountCents": 4500,
+			"categoryId": 5,
+			"paymentMethod": "alipay"
+		},
+		"attachments": [],
+		"createdAt": "2026-07-05T01:32:00Z",
+		"updatedAt": "2026-07-05T13:10:00Z"
+	},
+	{
+		"id": "8f11cab9-a895-47a7-a514-b2b752259f3c",
+		"kind": "show",
+		"title": "恋爱的犀牛",
+		"venue": "蜂巢剧场",
+		"eventTime": "2026-07-03T11:30:00Z",
+		"seat": "A区 3排8号",
+		"extra": {
+			"tour": "孟京辉戏剧工作室·2026 北京站",
+			"session": "晚场 19:30",
+			"zone": "A区"
+		},
+		"rating": 4,
+		"memo": "「黄昏是我一天中视力最差的时候」，现场版感染力完全不一样",
+		"transaction": {
+			"id": "099c2a80-504e-4e7f-b677-0156cd354db3",
+			"amountCents": 28000,
+			"categoryId": 5,
+			"paymentMethod": "alipay"
+		},
+		"attachments": [],
+		"createdAt": "2026-06-28T09:15:00Z",
+		"updatedAt": "2026-07-03T15:40:00Z"
+	},
+	{
+		"id": "0f7b2020-3b97-4ddd-a2b9-b3f890a328e9",
+		"kind": "flight",
+		"title": "MU5137 上海虹桥 → 北京首都",
+		"venue": "上海虹桥国际机场 T2",
+		"eventTime": "2026-07-01T00:05:00Z",
+		"seat": "32K",
+		"extra": {
+			"flightNo": "MU5137",
+			"airline": "中国东方航空",
+			"fromAirport": "上海虹桥 T2",
+			"toAirport": "北京首都 T2",
+			"departTime": "2026-07-01T00:05:00Z",
+			"arriveTime": "2026-07-01T02:20:00Z",
+			"cabin": "经济舱 Y"
+		},
+		"rating": 3,
+		"memo": "延误 40 分钟，云层颠簸；靠窗看到了渤海湾日出",
+		"transaction": {
+			"id": "8e6463c4-ce6e-4b68-92e7-1a8232150109",
+			"amountCents": 128000,
+			"categoryId": 3,
+			"paymentMethod": "card"
+		},
+		"attachments": [],
+		"createdAt": "2026-06-25T07:00:00Z",
+		"updatedAt": "2026-07-01T03:05:00Z"
+	}
+]

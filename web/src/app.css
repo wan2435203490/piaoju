@@ -1,0 +1,168 @@
+@import 'tailwindcss';
+
+/* ============================================================
+   拾光票局 设计 Tokens —— 唯一来源（piaoju-design skill §1 逐字落地）
+   规则：组件/页面禁止裸色值、裸尺寸魔数；缺 token 先在这里补再用。
+   Light 为 :root 默认，Dark 用 prefers-color-scheme 覆盖同名变量，
+   组件只引用 token 即自动适配双模式。
+   ============================================================ */
+
+:root {
+	/* ---- 色彩 Light（纸感：页面底不用纯白，文字不用纯黑） ---- */
+	--bg: #faf6ef; /* 页面底色 米白纸 */
+	--surface: #ffffff; /* 卡片 / 弹层 */
+	--ink: #292524; /* 主文字 */
+	--ink-2: #78716c; /* 次要文字 */
+	--line: #e7e0d3; /* 分隔线 / 描边 */
+	--brand: #c2410c; /* 主操作、选中态、金额支出 赭橙 */
+	--accent: #0f766e; /* 收入、成功、次强调 深青 */
+	--danger: #dc2626; /* 删除 / 错误 */
+
+	/* ---- 补充 token（design skill「缺 token 先补」）：实心色块上文字 & 遮罩 ---- */
+	--on-brand: #ffffff; /* --brand 实底上的文字，对比度 ≥ 4.5:1 */
+	--on-accent: #ffffff;
+	--on-danger: #ffffff;
+	--scrim: rgb(0 0 0 / 0.4); /* Sheet/Dialog 背后遮罩 */
+
+	/* ---- 票型色标（票根卡左侧色条 + 图标底色；两种模式同值） ---- */
+	--kind-movie: #e11d48;
+	--kind-show: #9333ea;
+	--kind-attraction: #ea580c;
+	--kind-train: #16a34a;
+	--kind-flight: #2563eb;
+	--kind-other: #64748b;
+
+	/* ---- 圆角（卡片 12 / 按钮·输入 10 / 票根卡 16 / 全屏 sheet 顶部 20） ---- */
+	--radius-chip: 6px; /* 补充：骨架条、小标签等小元素 */
+	--radius-btn: 10px;
+	--radius-card: 12px;
+	--radius-ticket: 16px;
+	--radius-sheet: 20px;
+
+	/* ---- 间距原则：4px 网格（4/8/12/16/24/32），页面左右留白 16px。
+	        Tailwind 默认 spacing 即 4px 基数（p-1=4px），组件 CSS 同样只用该网格。 ---- */
+	--page-inline: 16px;
+	--tabbar-height: 56px; /* TabBar 内容高度（不含安全区） */
+
+	/* ---- 投影：只此一档；暗色模式以描边替代（见下方覆盖） ---- */
+	--shadow-card: 0 1px 3px rgb(0 0 0 / 0.08);
+
+	/* ---- 动效：150ms hover/按压、250ms sheet/页面切换 ---- */
+	--dur-fast: 150ms;
+	--dur-slow: 250ms;
+	--ease: cubic-bezier(0.2, 0, 0, 1);
+
+	/* ---- 字体栈（不引入 webfont —— 包体红线） ---- */
+	--font-sans: system-ui, -apple-system, 'PingFang SC', 'Noto Sans SC', sans-serif;
+}
+
+/* 暗色：同名 token 整组覆盖 */
+@media (prefers-color-scheme: dark) {
+	:root {
+		--bg: #171412;
+		--surface: #211d1a;
+		--ink: #e7e0d8;
+		--ink-2: #a8a29e;
+		--line: #3b3532;
+		--brand: #f97316;
+		--accent: #2dd4bf;
+		--danger: #f87171;
+
+		/* 亮橙/亮青/亮红实底 → 深墨文字，保证对比度 */
+		--on-brand: #171412;
+		--on-accent: #171412;
+		--on-danger: #171412;
+		--scrim: rgb(0 0 0 / 0.55);
+
+		/* 暗色去投影，用描边 --line 表达层级（组件继续引用 --shadow-card 即可） */
+		--shadow-card: 0 0 0 1px var(--line);
+	}
+}
+
+/* ============================================================
+   Tailwind v4 主题映射：色彩/字体接入工具类，如
+   bg-bg / bg-surface / text-ink / text-ink-2 / border-line /
+   bg-brand / text-accent / text-danger / bg-kind-movie …
+   （inline：值随 prefers-color-scheme 动态解析）
+   圆角/投影/动效请直接用 var(--radius-card) 等 token。
+   ============================================================ */
+@theme inline {
+	--color-bg: var(--bg);
+	--color-surface: var(--surface);
+	--color-ink: var(--ink);
+	--color-ink-2: var(--ink-2);
+	--color-line: var(--line);
+	--color-brand: var(--brand);
+	--color-accent: var(--accent);
+	--color-danger: var(--danger);
+	--color-on-brand: var(--on-brand);
+	--color-on-accent: var(--on-accent);
+	--color-on-danger: var(--on-danger);
+	--color-kind-movie: var(--kind-movie);
+	--color-kind-show: var(--kind-show);
+	--color-kind-attraction: var(--kind-attraction);
+	--color-kind-train: var(--kind-train);
+	--color-kind-flight: var(--kind-flight);
+	--color-kind-other: var(--kind-other);
+	--font-sans: var(--font-sans);
+}
+
+/* ============================================================
+   全局基础
+   ============================================================ */
+@layer base {
+	html {
+		color-scheme: light dark;
+		font-family: var(--font-sans);
+	}
+
+	body {
+		background: var(--bg);
+		color: var(--ink);
+		/* 字号阶梯（rem）：12 辅助 / 14 正文 / 16 强调 / 20 标题 / 28 金额大数 / 34 月度汇总 */
+		font-size: 0.875rem;
+		line-height: 1.5; /* 正文 1.5 */
+		-webkit-font-smoothing: antialiased;
+		-webkit-tap-highlight-color: transparent;
+		accent-color: var(--brand);
+	}
+
+	h1,
+	h2,
+	h3,
+	h4 {
+		line-height: 1.25; /* 标题 1.25 */
+	}
+
+	:focus-visible {
+		outline: 2px solid var(--brand);
+		outline-offset: 2px;
+	}
+
+	/* 暗色下图片/照片降亮防刺眼（design skill §5） */
+	@media (prefers-color-scheme: dark) {
+		img,
+		video {
+			filter: brightness(0.9);
+		}
+	}
+}
+
+/* 数字等宽工具类：金额、时刻、序号一律 tabular-nums。
+   （Tailwind 内置 `tabular-nums` 同效，二者任选；组件内部 CSS 用
+   `font-variant-numeric: tabular-nums;`） */
+@utility tnum {
+	font-variant-numeric: tabular-nums;
+}
+
+/* 全局尊重 prefers-reduced-motion；Svelte JS transition 在组件内另行判断 */
+@media (prefers-reduced-motion: reduce) {
+	*,
+	::before,
+	::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+		scroll-behavior: auto !important;
+	}
+}

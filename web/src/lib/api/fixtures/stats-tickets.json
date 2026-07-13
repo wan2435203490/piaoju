@@ -1,0 +1,30 @@
+{
+	"total": 5,
+	"byKind": [
+		{
+			"kind": "movie",
+			"count": 1,
+			"cents": 9900
+		},
+		{
+			"kind": "show",
+			"count": 1,
+			"cents": 28000
+		},
+		{
+			"kind": "attraction",
+			"count": 1,
+			"cents": 4500
+		},
+		{
+			"kind": "train",
+			"count": 1,
+			"cents": 62300
+		},
+		{
+			"kind": "flight",
+			"count": 1,
+			"cents": 128000
+		}
+	]
+}

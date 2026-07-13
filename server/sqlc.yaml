@@ -1,0 +1,20 @@
+# sqlc 配置（engine: mysql）。schema 指向 golang-migrate 迁移目录（sqlc 自动忽略 *.down.sql）。
+#
+# 约定（piaoju-conventions §3）：
+#   - 每个模块的查询写在 internal/<mod>/queries.sql
+#   - 生成代码落在 internal/<mod>/<mod>db，包名 <mod>db（如 internal/auth/authdb）
+#   - S2-S5 接入：复制下方模板到 sql: 列表、替换 <mod>，然后执行
+#       sqlc generate
+#     本机没有 sqlc 二进制时：
+#       go run github.com/sqlc-dev/sqlc/cmd/sqlc@v1.30.0 generate
+#
+# 模板：
+#   - engine: mysql
+#     schema: migrations
+#     queries: internal/<mod>/queries.sql
+#     gen:
+#       go:
+#         package: <mod>db
+#         out: internal/<mod>/<mod>db
+version: "2"
+sql: []   # 尚无模块接入；S2 起把模板条目追加到这里（追加后删除本行的 []）

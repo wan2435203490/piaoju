@@ -1,0 +1,76 @@
+{
+	"expenseCents": 308980,
+	"incomeCents": 1865000,
+	"byCategory": [
+		{
+			"categoryId": 3,
+			"cents": 193450,
+			"count": 5
+		},
+		{
+			"categoryId": 5,
+			"cents": 46900,
+			"count": 4
+		},
+		{
+			"categoryId": 4,
+			"cents": 35500,
+			"count": 2
+		},
+		{
+			"categoryId": 1,
+			"cents": 17170,
+			"count": 8
+		},
+		{
+			"categoryId": 2,
+			"cents": 6090,
+			"count": 3
+		},
+		{
+			"categoryId": 8,
+			"cents": 4500,
+			"count": 1
+		},
+		{
+			"categoryId": 6,
+			"cents": 2990,
+			"count": 1
+		},
+		{
+			"categoryId": 7,
+			"cents": 2380,
+			"count": 1
+		}
+	],
+	"byDay": [
+		{
+			"date": "2026-07-01",
+			"expenseCents": 128000
+		},
+		{
+			"date": "2026-07-03",
+			"expenseCents": 28000
+		},
+		{
+			"date": "2026-07-05",
+			"expenseCents": 4500
+		},
+		{
+			"date": "2026-07-08",
+			"expenseCents": 62300
+		},
+		{
+			"date": "2026-07-10",
+			"expenseCents": 20190
+		},
+		{
+			"date": "2026-07-11",
+			"expenseCents": 25310
+		},
+		{
+			"date": "2026-07-12",
+			"expenseCents": 40680
+		}
+	]
+}

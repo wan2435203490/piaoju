@@ -1,0 +1,39 @@
+# Go
+server/bin/
+server/tmp/
+*.test
+coverage.out
+
+# Node
+node_modules/
+web/build/
+web/.svelte-kit/
+.pnpm-store/
+
+# Env / secrets
+.env
+.env.local
+
+# Data
+data/
+uploads/
+
+# Mobile build output
+mobile/android/app/build/
+mobile/ios/App/build/
+mobile/ios/App/Pods/
+
+# Mobile signing / local config
+*.jks
+*.keystore
+mobile/android/local.properties
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+/.idea/
+/.vscode/
+
+# Claude local settings
+.claude/settings.local.json

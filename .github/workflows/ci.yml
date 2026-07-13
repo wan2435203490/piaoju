@@ -1,0 +1,45 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  server:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: has-go
+        run: echo "ok=$([ -f server/go.mod ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - if: steps.has-go.outputs.ok == 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: server/go.mod
+      - if: steps.has-go.outputs.ok == 'true'
+        run: cd server && go vet ./... && go test ./...
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: has-web
+        run: echo "ok=$([ -f web/package.json ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+      - if: steps.has-web.outputs.ok == 'true'
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - if: steps.has-web.outputs.ok == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - if: steps.has-web.outputs.ok == 'true'
+        run: cd web && pnpm install --frozen-lockfile && pnpm check && pnpm build
+      # 包体红线：首屏 JS gzip < 200KB（conventions §5）
+      - if: steps.has-web.outputs.ok == 'true'
+        run: |
+          cd web/build
+          total=$(find . -name '*.js' -exec gzip -c {} \; | wc -c)
+          echo "gzipped JS total: $total bytes"
+          [ "$total" -lt 204800 ] || { echo "::error::bundle size $total >= 200KB"; exit 1; }
