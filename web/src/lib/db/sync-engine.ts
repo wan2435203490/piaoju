@@ -18,6 +18,7 @@
 import { api } from '$lib/api/client';
 import { ApiError } from '$lib/api/types';
 import type { SyncChange, SyncResult } from '$lib/api/types';
+import { emitSync } from './bus';
 import {
 	currentDB,
 	getCursor,
@@ -199,8 +200,10 @@ export async function pull(): Promise<number> {
 
 /** 一轮完整同步：先推后拉（推完再拉，避免刚推的改动被旧快照覆盖） */
 export async function syncOnce(): Promise<void> {
-	await flush();
-	await pull();
+	const pushed = await flush();
+	const pulled = await pull();
+	// 有实际变更才通知页面重读（空转的心跳不触发无谓重渲染）
+	if (pushed > 0 || pulled > 0) emitSync();
 }
 
 /* ============ 调度 ============ */

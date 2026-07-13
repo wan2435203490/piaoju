@@ -3,9 +3,11 @@
 	 * 票夹页：卡片墙 / 时间线双视图 + kind/年份筛选 + cursor 分页。
 	 * mock 模式（VITE_MOCK=1）数据来自 fixtures，五种票型全部有样本。
 	 */
+	import { onMount } from 'svelte';
 	import { fade } from 'svelte/transition';
 	import { goto } from '$app/navigation';
-	import { api } from '$lib/api/client';
+	import { data } from '$lib/data';
+	import { onSync } from '$lib/db/bus';
 	import type { Ticket, TicketKind } from '$lib/api/types';
 	import { TICKET_KINDS } from '$lib/api/types';
 	import Amount from '$lib/components/Amount.svelte';
@@ -29,7 +31,10 @@
 
 	/* ---------- 列表加载（cursor 分页） ---------- */
 
-	let items = $state<Ticket[]>([]);
+	/** data 层返回本地实体：_pending=1 表示尚未推到服务端（待同步小圆点） */
+	type ListedTicket = Ticket & { _pending?: 0 | 1 };
+
+	let items = $state<ListedTicket[]>([]);
 	let nextCursor = $state<string | null>(null);
 	let loading = $state(true);
 	let loadingMore = $state(false);
@@ -43,7 +48,7 @@
 		loading = true;
 		loadError = '';
 		try {
-			const page = await api.listTickets({
+			const page = await data.listTickets({
 				kind: kindQ || undefined,
 				year: yearQ || undefined
 			});
@@ -63,7 +68,7 @@
 		const seq = requestSeq;
 		loadingMore = true;
 		try {
-			const page = await api.listTickets({
+			const page = await data.listTickets({
 				kind: kind || undefined,
 				year: year || undefined,
 				cursor: nextCursor
@@ -82,6 +87,9 @@
 	$effect(() => {
 		void loadFirst(kind, year);
 	});
+
+	// 后台 sync 合并完服务端增量后重读（新票出现、已推送票的待同步圆点消失）
+	onMount(() => onSync(() => void loadFirst(kind, year)));
 
 	// 触底自动加载更多（哨兵元素；失败后仍有按钮兜底）
 	let sentinel = $state<HTMLElement | null>(null);
@@ -106,7 +114,7 @@
 
 	interface MonthGroup {
 		label: string;
-		items: Ticket[];
+		items: ListedTicket[];
 	}
 
 	const groups = $derived.by((): MonthGroup[] => {
@@ -239,7 +247,13 @@
 	<!-- 卡片墙 -->
 	<div class="list">
 		{#each visible as ticket (ticket.id)}
-			<TicketCard {ticket} />
+			<div class="card-wrap">
+				<TicketCard {ticket} />
+				{#if ticket._pending === 1}
+					<!-- 待同步小圆点（design §4）：本地已存、还没推到服务端 -->
+					<span class="pending-dot" role="img" aria-label="待同步" title="待同步"></span>
+				{/if}
+			</div>
 		{/each}
 	</div>
 {:else}
@@ -254,7 +268,13 @@
 							<span class="tl-dot" style:--dot={KIND_META[ticket.kind].color} aria-hidden="true"
 							></span>
 							<span class="tl-text">
-								<span class="tl-title">{ticket.title}</span>
+								<span class="tl-title">
+									{ticket.title}
+									{#if ticket._pending === 1}
+										<span class="pending-dot inline" role="img" aria-label="待同步" title="待同步"
+										></span>
+									{/if}
+								</span>
 								<span class="tl-sub tnum">
 									{KIND_META[ticket.kind].label} · {fmtDate(ticket.eventTime)}
 								</span>
@@ -422,6 +442,47 @@
 		display: flex;
 		flex-direction: column;
 		gap: 12px;
+	}
+
+	/* 待同步小圆点：卡片墙叠在票根卡右上角，时间线跟在标题后 */
+	.card-wrap {
+		position: relative;
+	}
+
+	.pending-dot {
+		position: absolute;
+		top: 10px;
+		right: 10px;
+		width: 6px;
+		height: 6px;
+		border-radius: 50%;
+		background: var(--ink-2);
+		/* 呼吸感 = 「在路上」，区别于静态的错误标记 */
+		animation: breathe 2s var(--ease) infinite;
+	}
+
+	.pending-dot.inline {
+		position: static;
+		display: inline-block;
+		margin-left: 6px;
+		vertical-align: middle;
+	}
+
+	@keyframes breathe {
+		0%,
+		100% {
+			opacity: 0.4;
+		}
+		50% {
+			opacity: 1;
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.pending-dot {
+			animation: none;
+			opacity: 0.7;
+		}
 	}
 
 	.skeleton-card {

@@ -50,7 +50,7 @@ R=$(curl -s "$BASE/transactions?month=2026-07" -H "$AUTH")
 check "tx list exactly 1 (no dup)" "$R" '.code==0 and (.data.items|length==1)'
 
 step "6. create ticket (电影票 45.00, 联动建交易)"
-TK="{\"id\":\"$TKID\",\"kind\":\"movie\",\"title\":\"冒烟测试:星际穿越\",\"venue\":\"CGV影城\",\"eventTime\":\"2026-07-12T19:30:00Z\",\"seat\":\"7排8座\",\"extra\":{\"cinema\":\"CGV影城\",\"hall\":\"IMAX厅\",\"filmFormat\":\"IMAX\"},\"rating\":5,\"memo\":\"\",\"amountCents\":4500,\"categoryId\":$CAT_ENT,\"paymentMethod\":\"alipay\",\"occurredAt\":\"2026-07-12T19:00:00Z\",\"attachmentIds\":[]}"
+TK="{\"id\":\"$TKID\",\"transactionId\":\"$TKTXID\",\"kind\":\"movie\",\"title\":\"冒烟测试:星际穿越\",\"venue\":\"CGV影城\",\"eventTime\":\"2026-07-12T19:30:00Z\",\"seat\":\"7排8座\",\"extra\":{\"cinema\":\"CGV影城\",\"hall\":\"IMAX厅\",\"filmFormat\":\"IMAX\"},\"rating\":5,\"memo\":\"\",\"amountCents\":4500,\"categoryId\":$CAT_ENT,\"paymentMethod\":\"alipay\",\"occurredAt\":\"2026-07-12T19:00:00Z\",\"attachmentIds\":[]}"
 R=$(curl -s -X POST $BASE/tickets -H "$AUTH" -H 'Content-Type: application/json' -d "$TK")
 check "ticket create + embedded tx" "$R" '.code==0 and .data.transaction.amountCents==4500'
 

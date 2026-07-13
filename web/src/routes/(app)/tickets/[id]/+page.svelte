@@ -5,7 +5,8 @@
 	 */
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { api, ApiError } from '$lib/api/client';
+	import { ApiError } from '$lib/api/client';
+	import { data } from '$lib/data';
 	import { ERR, type Category, type Ticket } from '$lib/api/types';
 	import Amount from '$lib/components/Amount.svelte';
 	import Button from '$lib/components/Button.svelte';
@@ -37,7 +38,7 @@
 		loadError = '';
 		ticket = null;
 
-		api
+		data
 			.getTicket(id)
 			.then((t) => {
 				if (!alive) return;
@@ -55,7 +56,7 @@
 			});
 
 		// 分类名非致命：失败只影响分类展示
-		api
+		data
 			.listCategories()
 			.then((items) => {
 				if (alive) categories = items;

@@ -5,7 +5,8 @@
 	 */
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { api, ApiError } from '$lib/api/client';
+	import { ApiError } from '$lib/api/client';
+	import { data } from '$lib/data';
 	import { ERR, type Ticket, type TicketInput } from '$lib/api/types';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import Skeleton from '$lib/components/Skeleton.svelte';
@@ -25,7 +26,7 @@
 		notFound = false;
 		ticket = null;
 
-		api
+		data
 			.getTicket(id)
 			.then((t) => {
 				if (!alive) return;

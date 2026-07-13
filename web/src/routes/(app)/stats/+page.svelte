@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { api } from '$lib/api/client';
+	import { data } from '$lib/data';
 	import type { Category, MonthlyStats } from '$lib/api/types';
 	import EmptyState from '$lib/components/EmptyState.svelte';
 	import Skeleton from '$lib/components/Skeleton.svelte';
@@ -32,9 +32,9 @@
 		loadError = '';
 		donutSelected = null;
 		try {
-			const data = await api.statsMonthly(target);
+			const monthly = await data.statsMonthly(target);
 			if (seq !== requestSeq) return;
-			stats = data;
+			stats = monthly;
 		} catch (error) {
 			if (seq !== requestSeq) return;
 			loadError = error instanceof Error ? error.message : '加载失败';
@@ -53,7 +53,7 @@
 
 	onMount(() => {
 		void loadMonth(month, true);
-		api
+		data
 			.listCategories()
 			.then((list) => (categories = list))
 			.catch(() => {

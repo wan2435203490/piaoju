@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { fly } from 'svelte/transition';
-	import { api } from '$lib/api/client';
+	import { data } from '$lib/data';
+	import { onSync } from '$lib/db/bus';
 	import { outbox } from '$lib/db/outbox';
 	import type { Category, Transaction, TransactionInput } from '$lib/api/types';
 	import Amount from '$lib/components/Amount.svelte';
@@ -39,8 +40,17 @@
 	/** 分类加载失败（快记面板显示错误态 + 重试） */
 	let categoriesError = $state(false);
 
-	/** 离线队列尚未确认的 id（「待同步」小圆点） */
+	/**
+	 * 「待同步」小圆点的判定（design §4）。两个来源：
+	 * - `tx._pending === 1`：本地库里有未推送的改动（离线队列的权威状态）
+	 * - `pendingIds`：在线直写模式（无本地库）下写失败的条目——此时没有本地库可查
+	 *
+	 * 注意不能只靠 pendingIds：离线队列的 outbox.create* 一写进本地库就 resolve，
+	 * 那只代表「已入队」，不代表「已推到服务端」，此时清圆点会骗人。
+	 */
 	let pendingIds = $state<string[]>([]);
+	const isPending = (tx: Transaction & { _pending?: 0 | 1 }): boolean =>
+		tx._pending === 1 || pendingIds.includes(tx.id);
 
 	let quickAddOpen = $state(false);
 
@@ -64,8 +74,8 @@
 		loadError = '';
 		try {
 			const [page, stats] = await Promise.all([
-				api.listTransactions({ month: target, limit: 50 }),
-				api.statsMonthly(target)
+				data.listTransactions({ month: target, limit: 50 }),
+				data.statsMonthly(target)
 			]);
 			if (seq !== requestSeq) return;
 			items = page.items;
@@ -86,7 +96,7 @@
 		if (!nextCursor || loadingMore || refetching) return;
 		loadingMore = true;
 		try {
-			const page = await api.listTransactions({ month, cursor: nextCursor, limit: 50 });
+			const page = await data.listTransactions({ month, cursor: nextCursor, limit: 50 });
 			items = [...items, ...page.items];
 			nextCursor = page.nextCursor;
 		} catch {
@@ -103,7 +113,7 @@
 
 	function loadCategories() {
 		categoriesError = false;
-		api
+		data
 			.listCategories()
 			.then((list) => (categories = list))
 			.catch(() => {
@@ -115,6 +125,8 @@
 	onMount(() => {
 		void loadMonth(month, true);
 		loadCategories();
+		// 后台 sync 把服务端增量合进本地库后重读：新数据出现、已推送条目的圆点消失
+		return onSync(() => void loadMonth(month));
 	});
 
 	/** 下拉刷新（design §4）：重取当前月流水 + 汇总，分类失败时顺带重试 */
@@ -328,7 +340,7 @@
 								<TransactionRow
 									{tx}
 									category={categoryMap.get(tx.categoryId)}
-									pending={pendingIds.includes(tx.id)}
+									pending={isPending(tx)}
 									onclick={() => openDetail(tx)}
 								/>
 							</div>

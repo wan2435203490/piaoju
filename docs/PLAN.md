@@ -80,11 +80,20 @@ DoD：与 mock 的 401 refresh 流程联调通过
 - T3.3 verify skill 真机流程验证
 - **⬅ M1+M2 完成线：web 端可日常使用**
 
-## Wave 4 — 离线同步（M3，≈1 周，少并行）
+## Wave 4 — 离线同步（M3）✅
 
-- S5 sync 后端：契约 §8，游标单调性 + LWW + 墓碑（独立 agent 可做，契约清晰）
-- W5 离线引擎：Dexie schema、outbox 队列重写（重试/退避/在线探测）、pull 合并、待同步 UI 标记、Service Worker（**主线程亲自写或紧盯**——分布式一致性不适合放养）
-- 测试卡：双端并发改同条记录、离线建票带照片、时钟漂移
+- [x] S5 sync 后端：契约 §8，游标单调性（updated_at,id keyset）+ LWW + 墓碑。24 个 sqlmock 单测
+- [x] W5 离线引擎：Dexie schema、outbox 队列（重试/指数退避/在线探测/队列合并）、pull 合并（本地 pending 不被覆盖）、待同步小圆点、Service Worker（app shell 缓存；数据离线归 Dexie）
+- [x] 测试卡：双端并发改同条记录、离线建票带照片、时钟漂移（`web/src/lib/db/offline*.test.ts`）
+- [x] 端到端冒烟：`scripts/sync-smoke.sh`
+
+**契约在本波补了两个只有离线才暴露的洞（详见 PROTOCOL v1.2）**：
+1. §5 `TicketInput.transactionId` —— 联动交易主键改由客户端生成。原先服务端自己 `newUUID()`，
+   离线建的票不知道交易 id，本地账本/统计就缺这一笔，直到联网 pull 回来才出现。
+2. §8 `clientUpdatedAt` 必须带毫秒 —— 服务端 `updated_at` 是 DATETIME(3)，秒级 `.000`
+   恒早于同秒内的服务端版本，会被 LWW 误判 stale。并明确两个时间戳来自不同时钟：
+   客户端时钟慢会导致自己的改动永远推不上去（`web/src/lib/db/clock.ts` 据 pull 下发的
+   服务端时间戳反推偏移并校正）。
 
 ## Wave 5 — 打包 App（M4，≈1 周）
 
