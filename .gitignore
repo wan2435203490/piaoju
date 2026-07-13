@@ -37,3 +37,6 @@ Thumbs.db
 
 # Claude local settings
 .claude/settings.local.json
+
+# Dev logs
+server/api-dev.log

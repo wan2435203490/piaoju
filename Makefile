@@ -1,3 +1,7 @@
+# 自动加载 .env（存在时）并导出给子进程；Make 原样取值，DSN 里的 &/()/! 不会被 shell 吃掉
+-include .env
+export
+
 MYSQL_DSN ?= mysql://piaoju:piaoju@tcp(127.0.0.1:3306)/piaoju
 MIGRATE   := docker run --rm -v $(PWD)/server/migrations:/migrations --network host \
              migrate/migrate:v4.17.1 -path=/migrations -database "$(MYSQL_DSN)"

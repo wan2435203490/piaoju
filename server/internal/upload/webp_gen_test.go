@@ -32,14 +32,14 @@ func (w *bitWriter) writeBits(v uint32, bits uint) {
 // genWebP 生成 w×h 纯色 (r,g,b,a) 的合法 lossless WebP。
 func genWebP(w, h int, r, g, b, a uint8) []byte {
 	bw := &bitWriter{}
-	bw.writeBits(0x2f, 8)           // VP8L magic
-	bw.writeBits(uint32(w-1), 14)   // width-1
-	bw.writeBits(uint32(h-1), 14)   // height-1
-	bw.writeBits(0, 1)              // alpha hint
-	bw.writeBits(0, 3)              // version 0
-	bw.writeBits(0, 1)              // 无 transform
-	bw.writeBits(0, 1)              // 无 color cache
-	bw.writeBits(0, 1)              // 无 meta huffman
+	bw.writeBits(0x2f, 8)                  // VP8L magic
+	bw.writeBits(uint32(w-1), 14)          // width-1
+	bw.writeBits(uint32(h-1), 14)          // height-1
+	bw.writeBits(0, 1)                     // alpha hint
+	bw.writeBits(0, 3)                     // version 0
+	bw.writeBits(0, 1)                     // 无 transform
+	bw.writeBits(0, 1)                     // 无 color cache
+	bw.writeBits(0, 1)                     // 无 meta huffman
 	tree := func(sym uint32, eight bool) { // simple code、单符号（读取 0 bit/符号）
 		bw.writeBits(1, 1) // simple
 		bw.writeBits(0, 1) // num_symbols-1 = 0

@@ -7,9 +7,9 @@ import (
 	"piaoju/internal/platform/apperr"
 )
 
-func strp(s string) *string    { return &s }
-func intp(n int) *int          { return &n }
-func i64p(n int64) *int64      { return &n }
+func strp(s string) *string     { return &s }
+func intp(n int) *int           { return &n }
+func i64p(n int64) *int64       { return &n }
 func idsp(ns ...int64) *[]int64 { return &ns }
 
 func validBody() body {
