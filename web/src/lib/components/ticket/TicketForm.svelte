@@ -7,6 +7,7 @@
 	 * - 新建 id 在挂载时生成一次（客户端 UUIDv4，重试幂等 upsert 不产生重复单）
 	 * - 编辑不提交 occurredAt（Ticket 内嵌交易摘要不含该字段，避免盲改）
 	 */
+	import { untrack } from 'svelte';
 	import { api } from '$lib/api/client';
 	import type {
 		Attachment,
@@ -49,7 +50,9 @@
 
 	let { initial, submitting = false, error = '', oncreate, onupdate }: Props = $props();
 
-	const isEdit = initial !== undefined;
+	/** 表单以本地草稿为准：initial 刻意只取一次做种子（untrack 声明该意图） */
+	const init = untrack(() => initial);
+	const isEdit = init !== undefined;
 	/** 新建票的业务主键：挂载时生成一次，提交重试不变（conventions §1 幂等） */
 	const createId = uuid();
 
@@ -69,22 +72,22 @@
 		);
 	}
 
-	let kind = $state<TicketKind>(initial?.kind ?? 'movie');
-	let title = $state(initial?.title ?? '');
-	let venue = $state(initial?.venue ?? '');
-	let seat = $state(initial?.seat ?? '');
+	let kind = $state<TicketKind>(init?.kind ?? 'movie');
+	let title = $state(init?.title ?? '');
+	let venue = $state(init?.venue ?? '');
+	let seat = $state(init?.seat ?? '');
 	/* 日期默认今天、时间默认现在（design §4） */
-	let eventTimeLocal = $state(initial ? isoToLocalInput(initial.eventTime) : nowLocalInput());
-	let extra = $state<Record<string, string>>(initial ? initExtra(initial) : blankExtra('movie'));
-	let rating = $state(initial?.rating ?? 0);
-	let memo = $state(initial?.memo ?? '');
+	let eventTimeLocal = $state(init ? isoToLocalInput(init.eventTime) : nowLocalInput());
+	let extra = $state<Record<string, string>>(init ? initExtra(init) : blankExtra('movie'));
+	let rating = $state(init?.rating ?? 0);
+	let memo = $state(init?.memo ?? '');
 
-	let amountYuan = $state(initial ? centsToYuanInput(initial.transaction.amountCents) : '');
-	let categoryId = $state<number | null>(initial?.transaction.categoryId ?? null);
-	let paymentMethod = $state<PaymentMethod>(initial?.transaction.paymentMethod ?? 'wechat');
+	let amountYuan = $state(init ? centsToYuanInput(init.transaction.amountCents) : '');
+	let categoryId = $state<number | null>(init?.transaction.categoryId ?? null);
+	let paymentMethod = $state<PaymentMethod>(init?.transaction.paymentMethod ?? 'wechat');
 	let occurredAtLocal = $state(nowLocalInput());
 
-	let attachments = $state<Attachment[]>(initial ? [...initial.attachments] : []);
+	let attachments = $state<Attachment[]>(init ? [...init.attachments] : []);
 
 	function switchKind(next: TicketKind) {
 		if (kind === next) return;
