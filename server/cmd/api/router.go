@@ -13,6 +13,7 @@ import (
 	"piaoju/internal/platform/httpx"
 	"piaoju/internal/platform/token"
 	"piaoju/internal/stats"
+	syncmod "piaoju/internal/sync" // alias：包名 sync 与 stdlib 撞名
 	"piaoju/internal/ticket"
 	"piaoju/internal/transaction"
 	"piaoju/internal/upload"
@@ -50,7 +51,8 @@ func newRouter(conn *sql.DB, tm *token.Manager, cfg config.Config) http.Handler 
 			sec.Mount("/stats", stats.Routes(conn))
 			sec.Mount("/tickets", ticket.Routes(conn, cfg.JWTSecret))
 			sec.Mount("/uploads", upload.Routes(conn, cfg.UploadDir, cfg.UploadMaxMB, cfg.JWTSecret))
-			// S5 sync 模块 M3 接入：sec.Mount("/sync", syncmod.Routes(syncSvc))
+			// sync 的 secret 必须与 ticket/upload 同一把（pull 下发附件签名 URL）
+			sec.Mount("/sync", syncmod.Routes(conn, cfg.JWTSecret))
 		})
 	})
 

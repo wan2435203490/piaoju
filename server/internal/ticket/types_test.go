@@ -14,13 +14,14 @@ func idsp(ns ...int64) *[]int64 { return &ns }
 
 func validBody() body {
 	return body{
-		ID:          strp(tkID),
-		Kind:        strp("movie"),
-		Title:       strp("沙丘2"),
-		EventTime:   strp("2026-07-10T12:30:00Z"),
-		AmountCents: i64p(4500),
-		CategoryID:  i64p(3),
-		OccurredAt:  strp("2026-07-10T12:00:00Z"),
+		ID:            strp(tkID),
+		TransactionID: strp(txIDA),
+		Kind:          strp("movie"),
+		Title:         strp("沙丘2"),
+		EventTime:     strp("2026-07-10T12:30:00Z"),
+		AmountCents:   i64p(4500),
+		CategoryID:    i64p(3),
+		OccurredAt:    strp("2026-07-10T12:00:00Z"),
 	}
 }
 
@@ -63,6 +64,9 @@ func TestParseCreateRejects(t *testing.T) {
 	}{
 		{"missing id", func(b *body) { b.ID = nil }, apperr.CodeInvalidParam},
 		{"bad uuid", func(b *body) { b.ID = strp("not-a-uuid") }, apperr.CodeInvalidParam},
+		{"missing transactionId", func(b *body) { b.TransactionID = nil }, apperr.CodeInvalidParam},
+		{"bad transactionId", func(b *body) { b.TransactionID = strp("nope") }, apperr.CodeInvalidParam},
+		{"transactionId same as ticket id", func(b *body) { b.TransactionID = strp(tkID) }, apperr.CodeInvalidParam},
 		{"missing kind", func(b *body) { b.Kind = nil }, apperr.CodeInvalidParam},
 		{"bad kind", func(b *body) { b.Kind = strp("concert") }, apperr.CodeUnsupportedEnum},
 		{"missing title", func(b *body) { b.Title = nil }, apperr.CodeInvalidParam},

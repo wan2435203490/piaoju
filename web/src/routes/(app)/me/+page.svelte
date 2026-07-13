@@ -3,6 +3,7 @@
 	import { api } from '$lib/api/client';
 	import Button from '$lib/components/Button.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
+	import { teardownOffline } from '$lib/db/outbox';
 	import { clearUser, hasSession, loadUser } from '../../auth/session';
 
 	// User 只随 login/register 下发（契约无 GET /me），登录时已缓存到本地
@@ -50,6 +51,8 @@
 		} catch {
 			// 网络失败也继续：本地 token 已清，登出对用户已生效
 		}
+		// 停同步调度、关本地库（数据留着——同一用户再登录可复用缓存）
+		await teardownOffline();
 		clearUser();
 		await goto('/auth/login');
 	}

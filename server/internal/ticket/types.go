@@ -67,6 +67,7 @@ type TxSummary struct {
 // updatedAt 非契约 TicketInput 字段，作为幂等 LWW 提示可选接受（对齐 sync 的 clientUpdatedAt 语义）。
 type body struct {
 	ID            *string        `json:"id"`
+	TransactionID *string        `json:"transactionId"`
 	Kind          *string        `json:"kind"`
 	Title         *string        `json:"title"`
 	Venue         *string        `json:"venue"`
@@ -86,6 +87,7 @@ type body struct {
 // createData 校验通过、补全默认值后的 POST 载荷。
 type createData struct {
 	ID            string
+	TransactionID string // 联动交易主键，客户端 UUID（契约 §5 v1.2）；重放时以库中已有值为准
 	Kind          string
 	Title         string
 	Venue         string
@@ -152,6 +154,19 @@ func parseCreate(in body) (createData, error) {
 		return d, badParam("id must be a UUID")
 	}
 	d.ID = id
+
+	// transactionId：联动交易主键，同样客户端生成（契约 §5 v1.2，离线建票需立刻入本地账本）。
+	if in.TransactionID == nil {
+		return d, badParam("transactionId is required (client-generated UUID)")
+	}
+	txID := strings.ToLower(strings.TrimSpace(*in.TransactionID))
+	if !uuidRe.MatchString(txID) {
+		return d, badParam("transactionId must be a UUID")
+	}
+	if txID == id {
+		return d, badParam("transactionId must differ from ticket id")
+	}
+	d.TransactionID = txID
 
 	if in.Kind == nil {
 		return d, badParam("kind is required")

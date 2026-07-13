@@ -73,7 +73,7 @@ func joinCols() []string {
 
 func sampleCreate() createData {
 	return createData{
-		ID: tkID, Kind: "movie", Title: "沙丘2", Venue: "万达影城",
+		ID: tkID, TransactionID: txIDA, Kind: "movie", Title: "沙丘2", Venue: "万达影城",
 		EventTime: evtTime, Seat: "5排8座",
 		Extra:  map[string]string{"cinema": "万达影城CBD店"},
 		Rating: 5, Memo: "IMAX", AmountCents: 4500, CategoryID: 3,
@@ -90,11 +90,12 @@ func TestCreateInsertsTicketAndTransactionAtomically(t *testing.T) {
 	mock.ExpectBegin()
 	mock.ExpectQuery(regexp.QuoteMeta(sqlSelectTicketMeta)).
 		WithArgs(tkID, uidA).WillReturnError(sql.ErrNoRows)
+	// 交易主键取客户端传入的 transactionId（契约 §5 v1.2），不再是服务端随机 UUID → 可精确断言。
 	mock.ExpectExec(regexp.QuoteMeta(sqlInsertTransaction)).
-		WithArgs(sqlmock.AnyArg(), uidA, int64(4500), "expense", int64(3), "沙丘2", occTime, "wechat", fixedNow, fixedNow).
+		WithArgs(txIDA, uidA, int64(4500), "expense", int64(3), "沙丘2", occTime, "wechat", fixedNow, fixedNow).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(regexp.QuoteMeta(sqlInsertTicket)).
-		WithArgs(tkID, uidA, sqlmock.AnyArg(), "movie", "沙丘2", "万达影城", evtTime, "5排8座",
+		WithArgs(tkID, uidA, txIDA, "movie", "沙丘2", "万达影城", evtTime, "5排8座",
 			[]byte(`{"cinema":"万达影城CBD店"}`), 5, "IMAX", fixedNow, fixedNow).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
@@ -106,8 +107,8 @@ func TestCreateInsertsTicketAndTransactionAtomically(t *testing.T) {
 	if got.ID != tkID || got.Transaction.AmountCents != 4500 || got.Transaction.CategoryID != 3 {
 		t.Fatalf("ticket = %+v", got)
 	}
-	if !uuidRe.MatchString(got.Transaction.ID) {
-		t.Fatalf("transaction id %q not a UUID", got.Transaction.ID)
+	if got.Transaction.ID != txIDA {
+		t.Fatalf("transaction id = %q, want client-supplied %q", got.Transaction.ID, txIDA)
 	}
 	if got.Extra["cinema"] != "万达影城CBD店" || got.Extra["hall"] != "" || got.Extra["filmFormat"] != "" {
 		t.Fatalf("extra not filled to full shape: %v", got.Extra)

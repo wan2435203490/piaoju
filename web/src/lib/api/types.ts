@@ -262,6 +262,11 @@ export function isKind<K extends TicketKind>(ticket: Ticket, kind: K): ticket is
 /** POST /tickets 请求体（服务端事务内同时建 Transaction） */
 export interface TicketInput<K extends TicketKind = TicketKind> {
 	id: string;
+	/**
+	 * 联动交易的主键，与 id 一样由客户端生成 UUIDv4（契约 §5 v1.2）。
+	 * 离线建票时本地要立刻把这笔交易写进账本，等不了服务端生成。
+	 */
+	transactionId: string;
 	kind: K;
 	title: string;
 	venue: string;

@@ -248,7 +248,8 @@ export const mockApi: ApiClient = {
 		const db = getDb();
 		const now = nowIso();
 		const summary: TicketTransactionSummary = {
-			id: crypto.randomUUID(),
+			// 契约 §5 v1.2：联动交易主键由客户端传入，服务端/mock 都不自己生成
+			id: input.transactionId,
 			amountCents: input.amountCents,
 			categoryId: input.categoryId,
 			paymentMethod: input.paymentMethod

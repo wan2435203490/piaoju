@@ -2,7 +2,6 @@ package ticket
 
 import (
 	"context"
-	"crypto/rand"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -327,7 +326,9 @@ func (s *service) createInsert(ctx context.Context, tx *sql.Tx, uid int64, d cre
 	if err != nil {
 		return nil, err
 	}
-	txID := newUUID() // 交易主键由服务端生成（契约 §5：服务端事务内同时建 Transaction，note = title 快照）
+	// 交易主键由客户端生成（契约 §5 v1.2）——离线建票时本地须立刻把这笔交易写进账本，
+	// 等服务端生成就意味着离线期账本缺这一笔。note = title 快照。
+	txID := d.TransactionID
 	if _, err := tx.ExecContext(ctx, sqlInsertTransaction,
 		txID, uid, d.AmountCents, "expense", d.CategoryID, d.Title, d.OccurredAt, d.PaymentMethod, now, now); err != nil {
 		return nil, mapInsertErr(err, "ticket: insert transaction")
@@ -639,15 +640,4 @@ func (s *service) rebindAttachments(ctx context.Context, tx *sql.Tx, uid int64, 
 
 func placeholders(n int) string {
 	return strings.TrimSuffix(strings.Repeat("?, ", n), ", ")
-}
-
-// newUUID 生成 UUIDv4（crypto/rand，不引第三方库；transactions 主键用）。
-func newUUID() string {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		panic("ticket: crypto/rand unavailable: " + err.Error())
-	}
-	b[6] = b[6]&0x0f | 0x40
-	b[8] = b[8]&0x3f | 0x80
-	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16])
 }

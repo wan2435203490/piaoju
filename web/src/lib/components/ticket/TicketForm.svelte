@@ -54,7 +54,10 @@
 	const init = untrack(() => initial);
 	const isEdit = init !== undefined;
 	/** 新建票的业务主键：挂载时生成一次，提交重试不变（conventions §1 幂等） */
+	// 票根与其联动交易的主键都由客户端生成（契约 §5 v1.2）：离线建票时本地要同时
+	// 写入 tickets 和 transactions，交易 id 等不到服务端。组件实例内固定，重试不换 id。
 	const createId = uuid();
+	const createTransactionId = uuid();
 
 	/* ---------- 表单状态（编辑模式回填 initial） ---------- */
 
@@ -186,7 +189,12 @@
 			if (isEdit) {
 				onupdate?.(shared);
 			} else {
-				oncreate?.({ ...shared, id: createId, occurredAt: localInputToIso(occurredAtLocal) });
+				oncreate?.({
+					...shared,
+					id: createId,
+					transactionId: createTransactionId,
+					occurredAt: localInputToIso(occurredAtLocal)
+				});
 			}
 		}
 	}

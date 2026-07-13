@@ -84,9 +84,12 @@ Ticket = {
   attachments: Attachment[],
   createdAt, updatedAt
 }
-TicketInput = { id, kind, title, venue, eventTime, seat, extra, rating, memo,
+TicketInput = { id, transactionId, kind, title, venue, eventTime, seat, extra, rating, memo,
                 amountCents, categoryId, paymentMethod, occurredAt,
                 attachmentIds: number[] }
+  // transactionId（v1.2 补）：联动交易的主键，与 id 一样由客户端生成 UUIDv4
+  // （conventions §1；离线建票时本地须立刻能把这笔交易写进账本，故不能等服务端生成）。
+  // 幂等重放：以库中已存在的 transaction_id 为准，不被 payload 覆盖（防交易分裂）。
 Attachment = { id: number, url: string, thumbUrl: string, w: number, h: number }
 ```
 
@@ -127,7 +130,15 @@ POST /api/v1/sync/push
   { changes: [{ entity: "transaction"|"ticket", op: "upsert"|"delete",
                 payload: TransactionInput|TicketInput|{id}, clientUpdatedAt }] }
   → data: { results: [{ id, status: "applied"|"stale"|"error", code }] }
-  // LWW：payload.updatedAt(client) < 服务端 updated_at → stale（服务端版本随 pull 下发）
+  // LWW：clientUpdatedAt < 服务端 updated_at → stale（服务端版本随 pull 下发）
+  //
+  // clientUpdatedAt 必须带毫秒（"2026-07-13T13:20:58.421Z"）——服务端 updated_at 是
+  // DATETIME(3)，秒级时间戳（.000）恒早于同秒内的服务端版本，会被误判 stale。
+  // JS `new Date().toISOString()` 天然满足；shell `date -u +%...Z` 不满足。
+  //
+  // 时钟：服务端 updated_at 一律由服务端时钟写入，与 clientUpdatedAt 不同源。
+  // 客户端时钟慢于服务端 → 自己的改动恒被判 stale、永远推不上去，故客户端必须
+  // 用 pull 下发的 updatedAt 反推偏移并校正（web: lib/db/clock.ts）。
 
 GET /api/v1/sync/pull?since=<serverCursor>&limit=200
   → data: { transactions: [...], tickets: [...], categories: [...],
