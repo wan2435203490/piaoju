@@ -72,8 +72,8 @@ TransactionInput = 同上去掉 ticketId/createdAt/updatedAt
 ```
 GET    /api/v1/tickets?kind=&year=&cursor=&limit=20   → data: { items: Ticket[], nextCursor }
 GET    /api/v1/tickets/{id}
-POST   /api/v1/tickets            TicketInput    // 服务端事务内同时建 Transaction
-PATCH  /api/v1/tickets/{id}       Partial<TicketInput>（amountCents 变更同步改交易）
+POST   /api/v1/tickets            TicketInput    // 服务端事务内同时建 Transaction，其 note = title（建票/重放时快照）
+PATCH  /api/v1/tickets/{id}       Partial<TicketInput>（amountCents 变更同步改交易；title 变更不回写交易 note）
 DELETE /api/v1/tickets/{id}       // 软删票 + 关联交易
 
 Ticket = {

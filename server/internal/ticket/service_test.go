@@ -91,7 +91,7 @@ func TestCreateInsertsTicketAndTransactionAtomically(t *testing.T) {
 	mock.ExpectQuery(regexp.QuoteMeta(sqlSelectTicketMeta)).
 		WithArgs(tkID, uidA).WillReturnError(sql.ErrNoRows)
 	mock.ExpectExec(regexp.QuoteMeta(sqlInsertTransaction)).
-		WithArgs(sqlmock.AnyArg(), uidA, int64(4500), "expense", int64(3), "", occTime, "wechat", fixedNow, fixedNow).
+		WithArgs(sqlmock.AnyArg(), uidA, int64(4500), "expense", int64(3), "沙丘2", occTime, "wechat", fixedNow, fixedNow).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(regexp.QuoteMeta(sqlInsertTicket)).
 		WithArgs(tkID, uidA, sqlmock.AnyArg(), "movie", "沙丘2", "万达影城", evtTime, "5排8座",
@@ -130,7 +130,7 @@ func TestCreateReplayUpsertsBoth(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"transaction_id", "created_at", "updated_at"}).
 			AddRow(txIDA, created, updated))
 	mock.ExpectExec(regexp.QuoteMeta(sqlUpsertTransaction)).
-		WithArgs(int64(4500), int64(3), "wechat", occTime, fixedNow, txIDA, uidA).
+		WithArgs(int64(4500), int64(3), "wechat", "沙丘2", occTime, fixedNow, txIDA, uidA).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(regexp.QuoteMeta(sqlUpsertTicket)).
 		WithArgs("movie", "沙丘2", "万达影城", evtTime, "5排8座",
@@ -180,7 +180,7 @@ func TestCreateDuplicateKeyConflict(t *testing.T) {
 	mock.ExpectQuery(regexp.QuoteMeta(sqlSelectTicketMeta)).
 		WithArgs(tkID, uidA).WillReturnError(sql.ErrNoRows)
 	mock.ExpectExec(regexp.QuoteMeta(sqlInsertTransaction)).
-		WithArgs(sqlmock.AnyArg(), uidA, int64(4500), "expense", int64(3), "", occTime, "wechat", fixedNow, fixedNow).
+		WithArgs(sqlmock.AnyArg(), uidA, int64(4500), "expense", int64(3), "沙丘2", occTime, "wechat", fixedNow, fixedNow).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(regexp.QuoteMeta(sqlInsertTicket)).
 		WithArgs(tkID, uidA, sqlmock.AnyArg(), "movie", "沙丘2", "万达影城", evtTime, "5排8座",
@@ -397,6 +397,82 @@ func TestListLastPageNoCursor(t *testing.T) {
 	}
 	if len(res.Items) != 1 || res.NextCursor != nil {
 		t.Fatalf("items = %d, nextCursor = %v; want 1, nil", len(res.Items), res.NextCursor)
+	}
+	mustMeet(t, mock)
+}
+
+// TestListPaginationEmptyNextPage 用上页游标翻页且无更多数据 → items=[]（非 null）、nextCursor=null；
+// 同时验证游标经 encode→decode 后作为 (event_time, id) 双键断点原样进入 SQL（tie-breaker 写错会翻页丢票/重票）。
+func TestListPaginationEmptyNextPage(t *testing.T) {
+	svc, mock := newTestService(t)
+
+	curTime, curID, err := decodeCursor(encodeCursor(evtTime, tkID))
+	if err != nil {
+		t.Fatalf("cursor roundtrip: %v", err)
+	}
+
+	q := sqlSelectTicketJoin + " WHERE t.user_id = ? AND t.deleted_at IS NULL" +
+		" AND (t.event_time < ? OR (t.event_time = ? AND t.id < ?))" +
+		" ORDER BY t.event_time DESC, t.id DESC LIMIT ?"
+	mock.ExpectQuery(regexp.QuoteMeta(q)).
+		WithArgs(uidA, evtTime, evtTime, tkID, 3).
+		WillReturnRows(sqlmock.NewRows(joinCols()))
+
+	res, err := svc.list(context.Background(), uidA,
+		listFilter{limit: 2, hasCursor: true, curTime: curTime, curID: curID})
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if res.Items == nil || len(res.Items) != 0 {
+		t.Fatalf("items = %v, want empty non-nil slice", res.Items)
+	}
+	if res.NextCursor != nil {
+		t.Fatalf("nextCursor = %q, want nil", *res.NextCursor)
+	}
+	mustMeet(t, mock)
+}
+
+// TestListYearFilterBoundaries year 过滤是 UTC 半开区间 [年初, 次年初)。
+func TestListYearFilterBoundaries(t *testing.T) {
+	svc, mock := newTestService(t)
+	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	q := sqlSelectTicketJoin + " WHERE t.user_id = ? AND t.deleted_at IS NULL" +
+		" AND t.event_time >= ? AND t.event_time < ?" +
+		" ORDER BY t.event_time DESC, t.id DESC LIMIT ?"
+	mock.ExpectQuery(regexp.QuoteMeta(q)).
+		WithArgs(uidA, start, end, 21).
+		WillReturnRows(sqlmock.NewRows(joinCols()))
+
+	_, err := svc.list(context.Background(), uidA, listFilter{limit: 20, year: 2026})
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	mustMeet(t, mock)
+}
+
+// TestListAllFilters 组合过滤子句顺序固定：kind → year → cursor。
+func TestListAllFilters(t *testing.T) {
+	svc, mock := newTestService(t)
+	start := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	q := sqlSelectTicketJoin + " WHERE t.user_id = ? AND t.deleted_at IS NULL" +
+		" AND t.kind = ?" +
+		" AND t.event_time >= ? AND t.event_time < ?" +
+		" AND (t.event_time < ? OR (t.event_time = ? AND t.id < ?))" +
+		" ORDER BY t.event_time DESC, t.id DESC LIMIT ?"
+	mock.ExpectQuery(regexp.QuoteMeta(q)).
+		WithArgs(uidA, "movie", start, end, evtTime, evtTime, tkID, 21).
+		WillReturnRows(sqlmock.NewRows(joinCols()))
+
+	_, err := svc.list(context.Background(), uidA, listFilter{
+		limit: 20, kind: "movie", year: 2026,
+		hasCursor: true, curTime: evtTime, curID: tkID,
+	})
+	if err != nil {
+		t.Fatalf("list: %v", err)
 	}
 	mustMeet(t, mock)
 }

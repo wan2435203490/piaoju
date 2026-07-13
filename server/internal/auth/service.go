@@ -30,6 +30,9 @@ const (
 	sqlSelectRefreshForUpdate = "SELECT id, user_id, expires_at, revoked_at FROM refresh_tokens WHERE token_hash = ? FOR UPDATE"
 	sqlRevokeRefreshByID      = "UPDATE refresh_tokens SET revoked_at = ? WHERE id = ?"
 	sqlRevokeRefreshByHash    = "UPDATE refresh_tokens SET revoked_at = ? WHERE token_hash = ? AND revoked_at IS NULL"
+	// 重放检测（OAuth2 BCP / RFC 9700）：已吊销 token 再次被使用 = 令牌可能被窃，
+	// 吊销该用户名下全部未吊销 refresh，切断攻击者手里的整条旋转链。
+	sqlRevokeAllRefreshByUser = "UPDATE refresh_tokens SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL"
 
 	mysqlErrDuplicateEntry = 1062
 )
@@ -153,7 +156,18 @@ func (s *service) refresh(ctx context.Context, rawToken string) (*tokenPair, err
 	if err != nil {
 		return nil, fmt.Errorf("auth: select refresh: %w", err)
 	}
-	if revokedAt.Valid || !now.Before(expiresAt) {
+	if revokedAt.Valid {
+		// 已旋转的 token 再次出现：典型令牌被窃信号，吊销整个 token 家族后再报 40102。
+		// 家族吊销必须落库，故此分支单独 commit（其余失败路径仍走 defer rollback）。
+		if _, err := tx.ExecContext(ctx, sqlRevokeAllRefreshByUser, now, uid); err != nil {
+			return nil, fmt.Errorf("auth: revoke token family: %w", err)
+		}
+		if err := tx.Commit(); err != nil {
+			return nil, fmt.Errorf("auth: commit family revoke: %w", err)
+		}
+		return nil, errRefreshInvalid()
+	}
+	if !now.Before(expiresAt) {
 		return nil, errRefreshInvalid()
 	}
 

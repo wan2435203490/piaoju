@@ -158,12 +158,14 @@ export const mockApi: ApiClient = {
 		return clone(category);
 	},
 
-	async updateCategory(id: number, patch: Partial<CategoryInput>): Promise<Category> {
+	async updateCategory(id: number, patch: Partial<Pick<CategoryInput, 'name' | 'icon'>>): Promise<Category> {
 		await delay();
 		const category = getDb().categories.find((c) => c.id === id);
-		if (!category) throw new ApiError(ERR.NOT_FOUND, '资源不存在或无权访问');
-		if (category.isSystem) throw new ApiError(ERR.VALIDATION, '系统分类不可修改');
-		Object.assign(category, patch);
+		// 与服务端对齐（service.go patch）：系统分类与不存在同回 40401（契约 §1 不存在或无权访问）
+		if (!category || category.isSystem) throw new ApiError(ERR.NOT_FOUND, '资源不存在或无权访问');
+		// 与服务端 patchInput 对齐：只接受 name/icon，kind 不可改（契约 §3）
+		if (patch.name !== undefined) category.name = patch.name;
+		if (patch.icon !== undefined) category.icon = patch.icon;
 		return clone(category);
 	},
 
@@ -171,8 +173,8 @@ export const mockApi: ApiClient = {
 		await delay();
 		const db = getDb();
 		const category = db.categories.find((c) => c.id === id);
-		if (!category) throw new ApiError(ERR.NOT_FOUND, '资源不存在或无权访问');
-		if (category.isSystem) throw new ApiError(ERR.VALIDATION, '系统分类不可删除');
+		// 与服务端对齐（service.go remove）：系统分类与不存在同回 40401（契约 §1 不存在或无权访问）
+		if (!category || category.isSystem) throw new ApiError(ERR.NOT_FOUND, '资源不存在或无权访问');
 		db.categories = db.categories.filter((c) => c.id !== id);
 		// 契约 §3：删除后其交易归入「其他」
 		const fallback = category.kind === 'income' ? 11 : 8;
@@ -212,6 +214,9 @@ export const mockApi: ApiClient = {
 		await delay();
 		const tx = getDb().transactions.find((t) => t.id === id);
 		if (!tx) throw new ApiError(ERR.NOT_FOUND, '资源不存在或无权访问');
+		// 契约 §4 v1.1：PATCH 不允许改 direction（服务端返回 40001）
+		if (patch.direction !== undefined && patch.direction !== tx.direction)
+			throw new ApiError(ERR.VALIDATION, 'direction cannot be changed');
 		Object.assign(tx, patch, { id, updatedAt: nowIso() });
 		return clone(tx);
 	},
@@ -301,7 +306,7 @@ export const mockApi: ApiClient = {
 			if (categoryId != null) tx.categoryId = categoryId;
 			if (paymentMethod) tx.paymentMethod = paymentMethod;
 			if (occurredAt) tx.occurredAt = occurredAt;
-			if (patch.title) tx.note = patch.title;
+			// 契约 §5：note 为建票时 title 快照，PATCH title 不回写
 			tx.updatedAt = now;
 		}
 		return clone(ticket);

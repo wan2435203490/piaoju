@@ -132,8 +132,41 @@ func TestLoginRateLimited(t *testing.T) {
 	}
 }
 
-// TestRateLimitOnlyLogin register / refresh / logout 不受登录限流影响。
-func TestRateLimitOnlyLogin(t *testing.T) {
+// TestRegisterRateLimited 同 IP 第 6 次注册（1 分钟窗口内）被拒；校验失败的请求同样计数。
+func TestRegisterRateLimited(t *testing.T) {
+	srv, _ := newHandlerServer(t)
+	for i := range 5 {
+		// 缺 email 的校验失败请求，不触 DB，但计入配额。
+		status, env := postJSON(t, srv.URL+"/register",
+			map[string]string{"password": "sup3rsecret", "nickname": "n"})
+		if status != http.StatusBadRequest || env.Code != 40001 || strings.Contains(env.Message, "too many") {
+			t.Fatalf("attempt %d: status/code/message = %d/%d/%q, want plain 400/40001 validation", i+1, status, env.Code, env.Message)
+		}
+	}
+	status, env := postJSON(t, srv.URL+"/register",
+		map[string]string{"password": "sup3rsecret", "nickname": "n"})
+	if status != http.StatusBadRequest || env.Code != 40001 || !strings.Contains(env.Message, "too many") {
+		t.Fatalf("6th attempt: status/code/message = %d/%d/%q, want 400/40001 rate limited", status, env.Code, env.Message)
+	}
+}
+
+// TestRefreshRateLimited 同 IP 第 6 次 refresh（1 分钟窗口内）被拒。
+func TestRefreshRateLimited(t *testing.T) {
+	srv, _ := newHandlerServer(t)
+	for i := range 5 {
+		status, env := postJSON(t, srv.URL+"/refresh", map[string]string{})
+		if status != http.StatusBadRequest || env.Code != 40001 || strings.Contains(env.Message, "too many") {
+			t.Fatalf("attempt %d: status/code/message = %d/%d/%q, want plain 400/40001 validation", i+1, status, env.Code, env.Message)
+		}
+	}
+	status, env := postJSON(t, srv.URL+"/refresh", map[string]string{})
+	if status != http.StatusBadRequest || env.Code != 40001 || !strings.Contains(env.Message, "too many") {
+		t.Fatalf("6th attempt: status/code/message = %d/%d/%q, want 400/40001 rate limited", status, env.Code, env.Message)
+	}
+}
+
+// TestRateLimitIndependentPerEndpoint 各端点配额互不占用：login 被刷满不影响 refresh。
+func TestRateLimitIndependentPerEndpoint(t *testing.T) {
 	srv, mock := newHandlerServer(t)
 	for range 5 {
 		mock.ExpectQuery(sqlSelectUserByEmail).
@@ -143,7 +176,7 @@ func TestRateLimitOnlyLogin(t *testing.T) {
 	for range 5 {
 		postJSON(t, srv.URL+"/login", map[string]string{"email": "rl2@example.com", "password": "whatever123"})
 	}
-	// 限流已触发，但 refresh 走自己的路径（40102 而非 40001 限流拒绝）。
+	// login 配额已刷满，但 refresh 用独立配额，走自己的路径（40102 而非 40001 限流拒绝）。
 	mock.ExpectBegin()
 	mock.ExpectQuery(sqlSelectRefreshForUpdate).
 		WithArgs(sqlmock.AnyArg()).

@@ -13,9 +13,10 @@ import (
 )
 
 const (
-	maxLongEdge   = 2000 // 契约 §6：长边 >2000 等比缩放到 2000
-	thumbLongEdge = 480  // 缩略图长边 480
-	jpegQuality   = 80   // 契约 §6：质量 80
+	maxLongEdge   = 2000       // 契约 §6：长边 >2000 等比缩放到 2000
+	thumbLongEdge = 480        // 缩略图长边 480
+	jpegQuality   = 80         // 契约 §6：质量 80
+	maxPixels     = 40_000_000 // 解码前像素上限（≈40MP）：防解压炸弹（小体积 PNG 声明超大尺寸打爆内存）
 )
 
 // processed 处理完成的图片：原图与缩略图均为 JPEG（q80）。
@@ -33,6 +34,15 @@ func processImage(data []byte) (*processed, error) {
 	case "image/jpeg", "image/png", "image/webp":
 	default:
 		return nil, apperr.New(apperr.CodeUploadTooLarge, "unsupported image format, only jpeg/png/webp accepted")
+	}
+	// 全量解码前先只读头部宽高（DecodeConfig 不分配像素缓冲）：
+	// 高压缩比炸弹图（如 30000x30000 纯色 PNG 压缩后 <10MB）解码需 w*h*4 数 GB 内存，必须在解码前拒掉。
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		return nil, apperr.New(apperr.CodeUploadTooLarge, "corrupt or unsupported image data")
+	}
+	if cfg.Width <= 0 || cfg.Height <= 0 || int64(cfg.Width)*int64(cfg.Height) > maxPixels {
+		return nil, apperr.New(apperr.CodeUploadTooLarge, "image dimensions too large")
 	}
 	// AutoOrientation：JPEG 按 EXIF 方向摆正后再存，避免旋转图（png/webp 无 EXIF，无副作用）。
 	img, err := imaging.Decode(bytes.NewReader(data), imaging.AutoOrientation(true))

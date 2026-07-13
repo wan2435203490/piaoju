@@ -23,6 +23,7 @@
 	--on-accent: #ffffff;
 	--on-danger: #ffffff;
 	--scrim: rgb(0 0 0 / 0.4); /* Sheet/Dialog 背后遮罩 */
+	--on-scrim: #ffffff; /* --scrim 遮罩上的文字/图标；两种模式同值（遮罩恒为黑），暗色不覆盖 */
 
 	/* ---- 票型色标（票根卡左侧色条 + 图标底色；两种模式同值） ---- */
 	--kind-movie: #e11d48;
@@ -98,6 +99,7 @@
 	--color-on-brand: var(--on-brand);
 	--color-on-accent: var(--on-accent);
 	--color-on-danger: var(--on-danger);
+	--color-on-scrim: var(--on-scrim);
 	--color-kind-movie: var(--kind-movie);
 	--color-kind-show: var(--kind-show);
 	--color-kind-attraction: var(--kind-attraction);

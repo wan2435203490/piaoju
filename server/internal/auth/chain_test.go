@@ -197,13 +197,16 @@ func TestAuthFullChain(t *testing.T) {
 		t.Fatalf("refreshed access verify = (%d, %v), want (1, nil)", uid, err)
 	}
 
-	// ── 4. 旧 R1 已死：再次 refresh → 40102 ──────────────────────────────────
+	// ── 4. 旧 R1 已死：再次 refresh → 家族吊销落库 + 40102 ─────────────────────
 	mock.ExpectBegin()
 	mock.ExpectQuery(sqlSelectRefreshForUpdate).
 		WithArgs(hashToken(r1)).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "user_id", "expires_at", "revoked_at"}).
 			AddRow(int64(1), int64(1), time.Now().UTC().Add(720*time.Hour), time.Now().UTC()))
-	mock.ExpectRollback()
+	mock.ExpectExec(sqlRevokeAllRefreshByUser).
+		WithArgs(sqlmock.AnyArg(), int64(1)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
 
 	status, env = postJSON(t, srv.URL+"/api/v1/auth/refresh", map[string]string{"refreshToken": r1})
 	if status != http.StatusUnauthorized || env.Code != 40102 {

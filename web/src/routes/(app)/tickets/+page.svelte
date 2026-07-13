@@ -10,6 +10,7 @@
 	import { TICKET_KINDS } from '$lib/api/types';
 	import Amount from '$lib/components/Amount.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
+	import PullToRefresh from '$lib/components/PullToRefresh.svelte';
 	import Skeleton from '$lib/components/Skeleton.svelte';
 	import TicketCard from '$lib/components/ticket/TicketCard.svelte';
 	import { KIND_META, fmtDate, fmtMonth } from '$lib/components/ticket/kinds';
@@ -134,6 +135,8 @@
 	<title>票夹 · 拾光票局</title>
 </svelte:head>
 
+<!-- 下拉刷新包裹页面滚动内容；fixed 元素（FAB/Toast）留在组件外 -->
+<PullToRefresh onrefresh={() => loadFirst(kind, year)}>
 <header class="page-head">
 	<div class="head-row">
 		<div>
@@ -273,6 +276,7 @@
 		<span class="sentinel" bind:this={sentinel} aria-hidden="true"></span>
 	</div>
 {/if}
+</PullToRefresh>
 
 <!-- FAB：存一张新票根 -->
 <a class="fab" href="/tickets/new" aria-label="添加票根">＋</a>
@@ -320,7 +324,7 @@
 	}
 
 	.toggle-btn {
-		min-height: 40px;
+		min-height: 44px; /* 触控目标 */
 		padding: 0 12px;
 		border: none;
 		border-radius: calc(var(--radius-btn) - 2px);

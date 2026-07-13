@@ -13,6 +13,12 @@
 
 	let { open = $bindable(false), title = '', onclose, children }: Props = $props();
 
+	let panel: HTMLElement | undefined = $state();
+
+	// aria-modal 要求：焦点圈禁在面板内可聚焦元素间循环
+	const FOCUSABLE =
+		'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 	// Svelte JS transition 不受全局 CSS reduced-motion 规则约束，需自行判断
 	const reducedMotion = () =>
 		typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -24,8 +30,42 @@
 	}
 
 	function onkeydown(event: KeyboardEvent) {
-		if (event.key === 'Escape' && open) close();
+		if (!open) return;
+		if (event.key === 'Escape') {
+			close();
+			return;
+		}
+		if (event.key !== 'Tab' || !panel) return;
+		const focusables = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE));
+		if (focusables.length === 0) {
+			event.preventDefault();
+			panel.focus();
+			return;
+		}
+		const first = focusables[0];
+		const last = focusables[focusables.length - 1];
+		const active = document.activeElement;
+		const inside = active instanceof HTMLElement && panel.contains(active);
+		if (event.shiftKey) {
+			if (!inside || active === first) {
+				event.preventDefault();
+				last.focus();
+			}
+		} else if (!inside || active === last) {
+			event.preventDefault();
+			first.focus();
+		}
 	}
+
+	// 打开时把焦点移入面板，关闭时归还给打开前的元素（如 FAB）
+	$effect(() => {
+		if (!open || !panel || typeof document === 'undefined') return;
+		const prev = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+		panel.focus();
+		return () => {
+			prev?.focus();
+		};
+	});
 
 	// 弹层打开时锁定背景滚动
 	$effect(() => {
@@ -48,10 +88,12 @@
 		aria-hidden="true"
 	></div>
 	<div
+		bind:this={panel}
 		class="sheet"
 		role="dialog"
 		aria-modal="true"
 		aria-label={title || '底部面板'}
+		tabindex="-1"
 		transition:fly={{ y: 360, duration: dur(250), easing: cubicOut, opacity: 1 }}
 	>
 		<div class="grabber" aria-hidden="true"></div>
@@ -84,6 +126,11 @@
 		border-radius: var(--radius-sheet) var(--radius-sheet) 0 0; /* sheet 顶部圆角 20 */
 		box-shadow: var(--shadow-card); /* 暗色下自动变 --line 描边 */
 		padding: 8px var(--page-inline) calc(16px + env(safe-area-inset-bottom));
+	}
+
+	/* 面板容器仅接收编程式初始焦点，不展示焦点环 */
+	.sheet:focus {
+		outline: none;
 	}
 
 	.grabber {

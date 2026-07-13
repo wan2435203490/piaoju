@@ -5,11 +5,11 @@ import (
 	"time"
 )
 
-// 登录限流：5 次/分钟/IP（任务卡 S2）。进程内滑动窗口，单实例部署够用；
-// 多实例水平扩容时需换共享存储（Redis）——见交付说明。
+// 认证端点限流：5 次/分钟/IP（任务卡 S2，login/register/refresh 各自独立配额）。
+// 进程内滑动窗口，单实例部署够用；多实例水平扩容时需换共享存储（Redis）——见交付说明。
 const (
-	loginRateMax    = 5
-	loginRateWindow = time.Minute
+	authRateMax    = 5
+	authRateWindow = time.Minute
 
 	// maxTrackedKeys 超过即触发一次全表清扫，防恶意海量 IP 撑爆内存。
 	maxTrackedKeys = 10000

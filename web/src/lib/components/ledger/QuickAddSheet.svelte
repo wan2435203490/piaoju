@@ -14,6 +14,10 @@
 		open?: boolean;
 		/** 全量分类（组件内按方向过滤） */
 		categories: Category[];
+		/** 分类加载失败：pool 为空时分类区显示错误态 + 重试（design §6） */
+		categoriesError?: boolean;
+		/** 重新拉取分类 */
+		onretrycategories?: () => void;
 		/**
 		 * 保存回调：sheet 已自行关闭，页面负责乐观插入 + 走 outbox 落库
 		 * （3 秒快记：保存即关，不等网络 —— design §4）。
@@ -21,7 +25,13 @@
 		onsubmit?: (input: TransactionInput) => void;
 	}
 
-	let { open = $bindable(false), categories, onsubmit }: Props = $props();
+	let {
+		open = $bindable(false),
+		categories,
+		categoriesError = false,
+		onretrycategories,
+		onsubmit
+	}: Props = $props();
 
 	/* ---- 快记草稿态（关闭不清空，保存后重置） ---- */
 	let expr = $state('');
@@ -105,7 +115,20 @@
 	</div>
 
 	<div class="section">
-		<CategoryPicker categories={pool} selected={categoryId} onselect={(c) => (pickedCategory = c.id)} />
+		{#if pool.length > 0}
+			<CategoryPicker categories={pool} selected={categoryId} onselect={(c) => (pickedCategory = c.id)} />
+		{:else if categoriesError}
+			<!-- 错误态：分类拉取失败时快记不可用，必须给出原因 + 重试（design §6） -->
+			<div class="cat-fallback" role="alert">
+				<p class="cat-hint">分类加载失败，暂时无法记账</p>
+				<button type="button" class="cat-retry" onclick={() => onretrycategories?.()}>重试</button>
+			</div>
+		{:else}
+			<!-- 加载态：分类由服务端预置，为空即尚未加载完成 -->
+			<div class="cat-fallback" role="status">
+				<p class="cat-hint">分类加载中…</p>
+			</div>
+		{/if}
 	</div>
 
 	<div class="section">
@@ -190,7 +213,7 @@
 	}
 
 	.seg-btn {
-		min-height: 40px;
+		min-height: 44px; /* 触控目标 */
 		min-width: 56px;
 		padding: 0 10px;
 		border: none;
@@ -221,6 +244,43 @@
 
 	.section {
 		padding-block: 8px;
+	}
+
+	/* ---- 分类区空/错误态 ---- */
+	.cat-fallback {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 8px;
+		padding: 16px 12px;
+		background: var(--bg);
+		border-radius: var(--radius-btn);
+	}
+
+	.cat-hint {
+		margin: 0;
+		font-size: 0.875rem; /* 14 正文 */
+		color: var(--ink-2);
+		text-align: center;
+	}
+
+	.cat-retry {
+		min-height: 44px; /* 触控目标 */
+		min-width: 88px;
+		padding: 0 16px;
+		border: 1px solid var(--brand);
+		border-radius: var(--radius-btn);
+		background: transparent;
+		font-family: inherit;
+		font-size: 0.875rem;
+		font-weight: 600;
+		color: var(--brand);
+		cursor: pointer;
+		transition: background-color var(--dur-fast) var(--ease);
+	}
+
+	.cat-retry:active {
+		background: color-mix(in srgb, var(--brand) 8%, transparent);
 	}
 
 	.extras {

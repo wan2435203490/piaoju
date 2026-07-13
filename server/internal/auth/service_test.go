@@ -202,7 +202,7 @@ func TestRefreshRotationRevokesOld(t *testing.T) {
 	}
 }
 
-// TestRefresh40102 不存在 / 已吊销 / 已过期，一律 40102 且不发新 token。
+// TestRefresh40102 不存在 / 已过期，一律 40102 且不发新 token（已吊销见下方家族吊销测试）。
 func TestRefresh40102(t *testing.T) {
 	cases := []struct {
 		name string
@@ -211,11 +211,6 @@ func TestRefresh40102(t *testing.T) {
 		{"unknown token", func(mock sqlmock.Sqlmock) {
 			mock.ExpectQuery(sqlSelectRefreshForUpdate).
 				WithArgs(sqlmock.AnyArg()).WillReturnError(sql.ErrNoRows)
-		}},
-		{"revoked token", func(mock sqlmock.Sqlmock) {
-			mock.ExpectQuery(sqlSelectRefreshForUpdate).
-				WithArgs(sqlmock.AnyArg()).
-				WillReturnRows(refreshRows(11, 3, fixedNow.Add(time.Hour), fixedNow.Add(-time.Minute)))
 		}},
 		{"expired token", func(mock sqlmock.Sqlmock) {
 			mock.ExpectQuery(sqlSelectRefreshForUpdate).
@@ -236,6 +231,28 @@ func TestRefresh40102(t *testing.T) {
 				t.Fatal(err)
 			}
 		})
+	}
+}
+
+// TestRefreshReuseRevokesFamily 重放检测：已吊销 token 再次使用 → 吊销该用户
+// 全部未吊销 refresh（家族吊销）并 commit 落库，对外仍统一 40102，不发新 token。
+func TestRefreshReuseRevokesFamily(t *testing.T) {
+	svc, mock := newTestService(t)
+	const raw = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+
+	mock.ExpectBegin()
+	mock.ExpectQuery(sqlSelectRefreshForUpdate).
+		WithArgs(hashToken(raw)).
+		WillReturnRows(refreshRows(11, 3, fixedNow.Add(time.Hour), fixedNow.Add(-time.Minute)))
+	mock.ExpectExec(sqlRevokeAllRefreshByUser).
+		WithArgs(fixedNow, int64(3)).
+		WillReturnResult(sqlmock.NewResult(0, 2))
+	mock.ExpectCommit()
+
+	_, err := svc.refresh(context.Background(), raw)
+	wantAppErr(t, err, apperr.CodeRefreshInvalid)
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
 	}
 }
 

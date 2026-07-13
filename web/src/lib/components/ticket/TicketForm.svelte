@@ -465,9 +465,16 @@
 		border: none;
 		border-radius: 50%;
 		background: var(--scrim);
-		color: var(--surface);
+		color: var(--on-scrim); /* 遮罩恒为黑，✕ 固定亮色，两种模式对比度都达标 */
 		font-size: 0.75rem;
 		cursor: pointer;
+	}
+
+	/* 视觉保持 28px 圆，触达区扩到 44×44（design §4 触控目标硬规则） */
+	.photo-remove::before {
+		content: '';
+		position: absolute;
+		inset: -8px;
 	}
 
 	.photo-add {

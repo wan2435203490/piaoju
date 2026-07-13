@@ -152,8 +152,8 @@ export interface ApiClient {
 	listCategories(): Promise<Category[]>;
 	/** POST /categories */
 	createCategory(input: CategoryInput): Promise<Category>;
-	/** PATCH /categories/{id}（仅自定义分类） */
-	updateCategory(id: number, patch: Partial<CategoryInput>): Promise<Category>;
+	/** PATCH /categories/{id}（仅自定义分类；契约 §3 不允许改 kind，服务端只接受 name/icon） */
+	updateCategory(id: number, patch: Partial<Pick<CategoryInput, 'name' | 'icon'>>): Promise<Category>;
 	/** DELETE /categories/{id}（其交易归入「其他」） */
 	deleteCategory(id: number): Promise<null>;
 

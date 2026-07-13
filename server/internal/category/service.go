@@ -158,6 +158,8 @@ func (s *service) remove(ctx context.Context, uid, id int64) error {
 	return nil
 }
 
+// internal 包装底层 DB 错误：不转 apperr（其 Msg 会原样进响应信封），
+// 交由 httpx.Err 统一记日志并回固定的 "internal server error"。
 func internal(err error) error {
-	return apperr.New(apperr.CodeInternal, fmt.Sprintf("category: %v", err))
+	return fmt.Errorf("category: %w", err)
 }

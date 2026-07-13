@@ -5,7 +5,9 @@ package upload
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
+	"hash/crc32"
 	"image"
 	"testing"
 
@@ -79,4 +81,45 @@ func TestProcessImageRejectsCorruptJPEG(t *testing.T) {
 	fake := append([]byte{0xFF, 0xD8, 0xFF, 0xE0}, bytes.Repeat([]byte{0xAB}, 128)...)
 	_, err := processImage(fake)
 	wantTooLarge(t, err)
+}
+
+// pngWithHeader 构造带合法签名 + IHDR 的 PNG 头（无像素数据）。
+// DecodeConfig 只读 IHDR，足以触发解码前的尺寸校验。
+func pngWithHeader(w, h uint32) []byte {
+	ihdr := make([]byte, 13)
+	binary.BigEndian.PutUint32(ihdr[0:], w)
+	binary.BigEndian.PutUint32(ihdr[4:], h)
+	ihdr[8] = 8 // bit depth
+	ihdr[9] = 2 // color type: truecolor
+	var buf bytes.Buffer
+	buf.Write([]byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'})
+	binary.Write(&buf, binary.BigEndian, uint32(len(ihdr)))
+	buf.WriteString("IHDR")
+	buf.Write(ihdr)
+	binary.Write(&buf, binary.BigEndian, crc32.ChecksumIEEE(append([]byte("IHDR"), ihdr...)))
+	return buf.Bytes()
+}
+
+// 解压炸弹：小体积 PNG 声明 30000x30000（解码需 ~3.6GB RGBA）→ 必须在全量解码前拒（41301）。
+// 若该防线失效，此测试会尝试真解码并 OOM/超时，而不是静默通过。
+func TestProcessImageRejectsDecompressionBomb(t *testing.T) {
+	_, err := processImage(pngWithHeader(30000, 30000))
+	wantTooLarge(t, err)
+}
+
+// 阈值边界：恰好 40MP 不被尺寸校验拦（走到解码阶段），超 1 行即被尺寸校验拒。
+func TestProcessImagePixelCapBoundary(t *testing.T) {
+	wantMsg := func(err error, msg string) {
+		t.Helper()
+		var ae *apperr.Error
+		if !errors.As(err, &ae) || ae.Code != apperr.CodeUploadTooLarge || ae.Msg != msg {
+			t.Fatalf("err = %v, want apperr %d %q", err, apperr.CodeUploadTooLarge, msg)
+		}
+	}
+	// 8000x5000 = 40MP，恰好等于 maxPixels：通过尺寸校验，因无 IDAT 在全量解码阶段报 corrupt。
+	_, err := processImage(pngWithHeader(8000, 5000))
+	wantMsg(err, "corrupt or unsupported image data")
+	// 8000x5001 > maxPixels：尺寸校验直接拒。
+	_, err = processImage(pngWithHeader(8000, 5001))
+	wantMsg(err, "image dimensions too large")
 }

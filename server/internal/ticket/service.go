@@ -38,7 +38,7 @@ const (
 		" VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
 
 	// POST 同 id 重放（LWW upsert）：整体覆盖并清墓碑。
-	sqlUpsertTransaction = "UPDATE transactions SET amount_cents = ?, category_id = ?, payment_method = ?, occurred_at = ?, updated_at = ?, deleted_at = NULL WHERE id = ? AND user_id = ?"
+	sqlUpsertTransaction = "UPDATE transactions SET amount_cents = ?, category_id = ?, payment_method = ?, note = ?, occurred_at = ?, updated_at = ?, deleted_at = NULL WHERE id = ? AND user_id = ?"
 	sqlUpsertTicket      = "UPDATE tickets SET kind = ?, title = ?, venue = ?, event_time = ?, seat = ?, extra = ?, rating = ?, memo = ?, updated_at = ?, deleted_at = NULL WHERE id = ? AND user_id = ?"
 
 	// DELETE 同事务双软删（票 + 关联交易），bump updated_at 供 sync 墓碑下发。
@@ -305,7 +305,7 @@ func (s *service) create(ctx context.Context, uid int64, d createData) (*Ticket,
 		return nil, err
 	}
 	if _, err := tx.ExecContext(ctx, sqlUpsertTransaction,
-		d.AmountCents, d.CategoryID, d.PaymentMethod, d.OccurredAt, now, existingTxID, uid); err != nil {
+		d.AmountCents, d.CategoryID, d.PaymentMethod, d.Title, d.OccurredAt, now, existingTxID, uid); err != nil {
 		return nil, fmt.Errorf("ticket: upsert transaction: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, sqlUpsertTicket,
@@ -327,9 +327,9 @@ func (s *service) createInsert(ctx context.Context, tx *sql.Tx, uid int64, d cre
 	if err != nil {
 		return nil, err
 	}
-	txID := newUUID() // 交易主键由服务端生成（契约 §5：服务端事务内同时建 Transaction）
+	txID := newUUID() // 交易主键由服务端生成（契约 §5：服务端事务内同时建 Transaction，note = title 快照）
 	if _, err := tx.ExecContext(ctx, sqlInsertTransaction,
-		txID, uid, d.AmountCents, "expense", d.CategoryID, "", d.OccurredAt, d.PaymentMethod, now, now); err != nil {
+		txID, uid, d.AmountCents, "expense", d.CategoryID, d.Title, d.OccurredAt, d.PaymentMethod, now, now); err != nil {
 		return nil, mapInsertErr(err, "ticket: insert transaction")
 	}
 	if _, err := tx.ExecContext(ctx, sqlInsertTicket,

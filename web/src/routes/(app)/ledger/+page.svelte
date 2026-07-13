@@ -7,6 +7,7 @@
 	import Amount from '$lib/components/Amount.svelte';
 	import Button from '$lib/components/Button.svelte';
 	import EmptyState from '$lib/components/EmptyState.svelte';
+	import PullToRefresh from '$lib/components/PullToRefresh.svelte';
 	import Sheet from '$lib/components/Sheet.svelte';
 	import Skeleton from '$lib/components/Skeleton.svelte';
 	import MonthSwitcher from '$lib/components/ledger/MonthSwitcher.svelte';
@@ -35,6 +36,8 @@
 	let refetching = $state(false); // 换月：旧内容降透明度保留，不闪骨架
 	let loadingMore = $state(false);
 	let loadError = $state('');
+	/** 分类加载失败（快记面板显示错误态 + 重试） */
+	let categoriesError = $state(false);
 
 	/** 离线队列尚未确认的 id（「待同步」小圆点） */
 	let pendingIds = $state<string[]>([]);
@@ -98,15 +101,27 @@
 		void loadMonth(next);
 	}
 
-	onMount(() => {
-		void loadMonth(month, true);
+	function loadCategories() {
+		categoriesError = false;
 		api
 			.listCategories()
 			.then((list) => (categories = list))
 			.catch(() => {
-				/* 分类加载失败时行内回退到「未分类」展示 */
+				// 行内回退到「未分类」展示；快记面板走错误态 + 重试
+				categoriesError = true;
 			});
+	}
+
+	onMount(() => {
+		void loadMonth(month, true);
+		loadCategories();
 	});
+
+	/** 下拉刷新（design §4）：重取当前月流水 + 汇总，分类失败时顺带重试 */
+	async function refresh() {
+		if (categoriesError) loadCategories();
+		await loadMonth(month);
+	}
 
 	/* ================= 派生 ================= */
 
@@ -249,6 +264,8 @@
 	<title>账本 · 拾光票局</title>
 </svelte:head>
 
+<!-- 下拉刷新包裹页面滚动内容；fixed 元素（FAB/Sheet/Toast）留在组件外 -->
+<PullToRefresh onrefresh={refresh}>
 <header class="page-head">
 	<div>
 		<h1>账本</h1>
@@ -274,7 +291,10 @@
 		title="加载失败"
 		description={loadError}
 		actionLabel="重试"
-		onaction={() => void loadMonth(month, true)}
+		onaction={() => {
+			void loadMonth(month, true);
+			if (categoriesError) loadCategories();
+		}}
 	/>
 {:else}
 	<div class="content" class:refetching>
@@ -329,13 +349,20 @@
 		{/if}
 	</div>
 {/if}
+</PullToRefresh>
 
 <!-- FAB：56px --brand（design §4） -->
 <button type="button" class="fab" aria-label="快记一笔" onclick={() => (quickAddOpen = true)}>
 	<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" /></svg>
 </button>
 
-<QuickAddSheet bind:open={quickAddOpen} {categories} onsubmit={handleQuickAdd} />
+<QuickAddSheet
+	bind:open={quickAddOpen}
+	{categories}
+	{categoriesError}
+	onretrycategories={loadCategories}
+	onsubmit={handleQuickAdd}
+/>
 
 <!-- 详情 + 删除二次确认（ActionSheet 形态，design §4） -->
 <Sheet bind:open={detailOpen} title="账目详情" onclose={() => (confirmDelete = false)}>

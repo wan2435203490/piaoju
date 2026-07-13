@@ -23,7 +23,7 @@ import (
 func Routes(db *sql.DB, tm *token.Manager, accessTTL, refreshTTL time.Duration) chi.Router {
 	h := &handler{
 		svc:     &service{db: db, tm: tm, accessTTL: accessTTL, refreshTTL: refreshTTL, now: time.Now},
-		limiter: newRateLimiter(loginRateMax, loginRateWindow, time.Now),
+		limiter: newRateLimiter(authRateMax, authRateWindow, time.Now),
 	}
 	r := chi.NewRouter()
 	r.Post("/register", h.register)
@@ -35,7 +35,18 @@ func Routes(db *sql.DB, tm *token.Manager, accessTTL, refreshTTL time.Duration) 
 
 type handler struct {
 	svc     *service
-	limiter *rateLimiter // 仅 login 限流（5/min/IP）
+	limiter *rateLimiter // login/register/refresh 各自独立配额（key 按端点前缀隔离），5/min/IP
+}
+
+// throttle 端点限流：超限时写出错误响应并返回 false。key 带端点前缀，
+// 各端点配额互不占用（login 被刷不影响正常 refresh）。
+// 超限暂用 40001——契约码表无 429 段位（与 login 既有行为一致）。
+func (h *handler) throttle(w http.ResponseWriter, r *http.Request, endpoint string) bool {
+	if h.limiter.allow(endpoint + ":" + clientIP(r)) {
+		return true
+	}
+	httpx.Err(w, apperr.New(apperr.CodeInvalidParam, "too many "+endpoint+" attempts, please retry in a minute"))
+	return false
 }
 
 func decodeBody(r *http.Request) (body, error) {
@@ -47,7 +58,12 @@ func decodeBody(r *http.Request) (body, error) {
 }
 
 // register POST /register {email,password(≥8),nickname} → {user,accessToken,refreshToken}。
+// 限流在最前：argon2id 哈希（~19MiB/~15ms）在任何 DB 检查前无条件执行，且 40901
+// 是无速率约束的邮箱枚举通道——不限流即 CPU/内存放大 + 批量灌库。
 func (h *handler) register(w http.ResponseWriter, r *http.Request) {
+	if !h.throttle(w, r, "register") {
+		return
+	}
 	in, err := decodeBody(r)
 	if err != nil {
 		httpx.Err(w, err)
@@ -67,10 +83,9 @@ func (h *handler) register(w http.ResponseWriter, r *http.Request) {
 }
 
 // login POST /login {email,password} → 同 register 响应形状；错误恒 40103。
-// 限流在最前（含校验失败的请求都计数），超限暂用 40001——契约码表无 429 段位。
+// 限流在最前（含校验失败的请求都计数）。
 func (h *handler) login(w http.ResponseWriter, r *http.Request) {
-	if !h.limiter.allow(clientIP(r)) {
-		httpx.Err(w, apperr.New(apperr.CodeInvalidParam, "too many login attempts, please retry in a minute"))
+	if !h.throttle(w, r, "login") {
 		return
 	}
 	in, err := decodeBody(r)
@@ -92,7 +107,11 @@ func (h *handler) login(w http.ResponseWriter, r *http.Request) {
 }
 
 // refresh POST /refresh {refreshToken} → 新 token 对；旧 refresh 立即吊销（旋转）。
+// 限流防离线爆破 refresh token 与无认证的 DB 压力放大。
 func (h *handler) refresh(w http.ResponseWriter, r *http.Request) {
+	if !h.throttle(w, r, "refresh") {
+		return
+	}
 	in, err := decodeBody(r)
 	if err != nil {
 		httpx.Err(w, err)
