@@ -48,7 +48,12 @@
 	function pointAt(event: PointerEvent) {
 		if (!svgEl || shown.length === 0) return;
 		const rect = svgEl.getBoundingClientRect();
-		const y = ((event.clientY - rect.top) / rect.height) * height;
+		// svg 用默认 preserveAspectRatio="xMidYMid meet"：容器实宽 ≠ viewBox 宽（360）时，
+		// 内容整体按 scale 等比缩放并上下留白（letterbox）。命中前需先还原 scale 与竖直偏移，
+		// 把指针位置换算回 viewBox 单位，否则靠下的行会算到相邻行。
+		const scale = Math.min(rect.width / W, rect.height / height);
+		const offsetY = (rect.height - height * scale) / 2;
+		const y = (event.clientY - rect.top - offsetY) / scale;
 		const i = Math.floor(y / ROW);
 		hovered = i >= 0 && i < shown.length ? (shown[i]?.name ?? null) : null;
 	}

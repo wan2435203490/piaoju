@@ -217,9 +217,12 @@
 		const src = (draft.extra ?? {}) as Record<string, string>;
 		const next = { ...extra };
 		for (const def of EXTRA_FIELDS[draft.kind ?? kind]) {
-			const value = src[def.key];
+			const raw = src[def.key];
+			if (!raw) continue;
+			// datetime 型：RFC3339 → 本地输入值；无法解析回 '' 时不回填也不高亮（避免「已识别」空字段）
+			const value = def.type === 'datetime' ? isoToLocalInput(raw) : raw;
 			if (!value) continue;
-			next[def.key] = def.type === 'datetime' ? isoToLocalInput(value) : value;
+			next[def.key] = value;
 			keys.push(`extra:${def.key}`);
 		}
 		extra = next;

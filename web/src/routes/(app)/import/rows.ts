@@ -12,6 +12,13 @@ import { ApiError, ERR, type Category, type Direction, type ImportRow, type Impo
 /** 每批提交条数（几百行时分批 + 进度条，避免长任务卡 UI） */
 export const IMPORT_BATCH_SIZE = 20;
 
+/**
+ * 预览列表最多渲染的行数（契约 §6.2 只限文件 5MB，一份账单可达数万行）。
+ * 超出只展示前 N 条供核对，未展示的行按建议默认全量导入 —— 避免几万个 <li>
+ * 一次性铺满 DOM 把主线程冻住（ANR/白屏）。核对/改分类需要时请按月份分开导出。
+ */
+export const IMPORT_PREVIEW_LIMIT = 500;
+
 export const SOURCE_LABEL: Record<ImportSource, string> = {
 	wechat: '微信支付',
 	alipay: '支付宝'

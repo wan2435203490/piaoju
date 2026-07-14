@@ -209,6 +209,32 @@ func TestRecognizeZeroValues(t *testing.T) {
 	}
 }
 
+// extra 内的时间字段（departTime/arriveTime）与 eventTime 同规归一化为 RFC3339 UTC：
+// 可解析的带时区串 → UTC；裸时刻/不可解析 → ""（不猜，避免前端 datetime 回填静默丢值）。
+func TestRecognizeNormalizesExtraTimeFields(t *testing.T) {
+	llm := &fakeLLM{out: &modelOutput{
+		Kind: "train",
+		Extra: map[string]string{
+			"departTime": "2026-07-12T08:32:00+08:00", // 合法 → 换算 UTC
+			"arriveTime": "08:32",                     // 裸时刻，无法解析 → ""
+		},
+		Confidence: 0.9,
+	}}
+	s, mock, rel := newTestService(t, llm)
+	expectAttachment(mock, rel)
+
+	d, err := s.Recognize(context.Background(), uidA, attA)
+	if err != nil {
+		t.Fatalf("Recognize: %v", err)
+	}
+	if d.Extra["departTime"] != "2026-07-12T00:32:00Z" {
+		t.Fatalf("departTime = %q, want RFC3339 UTC", d.Extra["departTime"])
+	}
+	if d.Extra["arriveTime"] != "" {
+		t.Fatalf("arriveTime = %q, want \"\" for unparseable bare time", d.Extra["arriveTime"])
+	}
+}
+
 // 模型返回非法 kind → 拒绝（不落到客户端）。
 func TestRecognizeRejectsInvalidKind(t *testing.T) {
 	llm := &fakeLLM{out: &modelOutput{Kind: "concert", Confidence: 0.9}}

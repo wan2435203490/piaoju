@@ -49,6 +49,15 @@ const (
 	maxExtraValueLen = 512
 )
 
+// extraTimeFields extra 内的时间字段：契约 §5 中这些字段前端为 datetime 型、
+// 与 §5 TicketInput 同名字段语义一致存 RFC3339 UTC（§6.1「字段语义同 §5」）。
+// 与 eventTime 同规归一化：可解析→RFC3339 UTC，否则→""（不猜）——
+// 否则模型透传的裸时刻（如 "08:32"）会让前端 isoToLocalInput 解析失败、静默丢值。
+var extraTimeFields = map[string]bool{
+	"departTime": true,
+	"arriveTime": true,
+}
+
 // modelOutput LLM 结构化输出的落地结构（json_schema 保证形状，值仍需业务校验）。
 // extra 是五种 kind 全字段的并集，按识别出的 kind 过滤后才进 Draft。
 type modelOutput struct {
@@ -77,7 +86,12 @@ func (m *modelOutput) toDraft() (*Draft, error) {
 
 	extra := make(map[string]string, len(fields))
 	for _, f := range fields {
-		extra[f] = truncate(strings.TrimSpace(m.Extra[f]), maxExtraValueLen)
+		v := strings.TrimSpace(m.Extra[f])
+		if extraTimeFields[f] {
+			extra[f] = normalizeTime(v) // 与 eventTime 同规：裸时刻/不可解析 → ""
+		} else {
+			extra[f] = truncate(v, maxExtraValueLen)
+		}
 	}
 
 	conf := m.Confidence

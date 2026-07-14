@@ -1,7 +1,6 @@
 <script lang="ts">
 	import Amount from '$lib/components/Amount.svelte';
 	import { KIND_META } from '$lib/components/ticket/kinds';
-	import { formatCents } from '$lib/utils/money';
 	import type { KindSummary } from './data';
 
 	interface Props {
@@ -39,7 +38,7 @@
 					<span class="emoji" aria-hidden="true">{meta.emoji}</span>
 					<span class="tile-body">
 						<span class="tile-count"><b class="tnum">{k.count}</b> 场{meta.label}</span>
-						<span class="tile-cents tnum">¥{formatCents(k.cents)}</span>
+						<span class="tile-cents"><Amount cents={k.cents} direction="expense" /></span>
 					</span>
 				</li>
 			{/each}

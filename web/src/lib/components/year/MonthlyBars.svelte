@@ -1,4 +1,5 @@
 <script lang="ts">
+	import Amount from '$lib/components/Amount.svelte';
 	import { yuanCompact } from '$lib/components/ledger/format';
 	import { formatCents } from '$lib/utils/money';
 	import type { MonthPoint } from './data';
@@ -85,7 +86,7 @@
 	{#if readout}
 		<div class="readout">
 			<span class="label tnum">{readout.index} 月{hovered == null ? ' · 全年最高' : ''}</span>
-			<span class="value tnum">¥{formatCents(readout.cents)}</span>
+			<span class="value"><Amount cents={readout.cents} direction="expense" /></span>
 		</div>
 	{/if}
 

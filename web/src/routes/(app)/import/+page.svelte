@@ -21,6 +21,7 @@
 	import { uuid } from '$lib/utils/uuid';
 	import {
 		IMPORT_BATCH_SIZE,
+		IMPORT_PREVIEW_LIMIT,
 		SOURCE_EMOJI,
 		SOURCE_LABEL,
 		categoriesFor,
@@ -53,13 +54,25 @@
 
 	/** 进度（分批提交时刷新） */
 	let done = $state(0);
+	/** 本轮导入的目标条数（首次=已选，重试=失败条数）；进度条分母 */
+	let importTotal = $state(0);
 	let result = $state({ ok: 0, failed: 0, skipped: 0 });
+	/** 本轮写入失败的行；停留在完成页供「重试失败的 N 条」复用（同一 id → 幂等不写重） */
+	let failedRows = $state<ImportRow[]>([]);
 
 	/** 改分类的行（打开 Sheet） */
 	let editingRow = $state<ImportRow | null>(null);
 
 	const summary = $derived(summarize(rows, selected));
-	const progressPct = $derived(summary.selected === 0 ? 0 : Math.round((done / summary.selected) * 100));
+	const progressPct = $derived(importTotal === 0 ? 0 : Math.round((done / importTotal) * 100));
+
+	/** 勾选集合的 O(1) 命中表：selected 变一次重建一次，渲染时 isSelected 就不再是 O(n) 线扫（否则数万行 → O(n²) 冻死主线程） */
+	const selectedSet = $derived(new Set(selected));
+	/** 只渲染前 N 条（数万行全量铺 DOM 会 ANR）；导入仍作用于全部 rows */
+	const visibleRows = $derived(
+		rows.length > IMPORT_PREVIEW_LIMIT ? rows.slice(0, IMPORT_PREVIEW_LIMIT) : rows
+	);
+	const truncated = $derived(rows.length > IMPORT_PREVIEW_LIMIT);
 
 	$effect(() => {
 		let alive = true;
@@ -116,11 +129,14 @@
 		fileName = '';
 		error = '';
 		done = 0;
+		importTotal = 0;
+		failedRows = [];
+		result = { ok: 0, failed: 0, skipped: 0 };
 	}
 
 	/* ---------- 勾选 / 改分类 ---------- */
 
-	const isSelected = (rowIndex: number) => selected.includes(rowIndex);
+	const isSelected = (rowIndex: number) => selectedSet.has(rowIndex);
 
 	function toggle(rowIndex: number) {
 		selected = toggleRow(selected, rowIndex);
@@ -140,14 +156,20 @@
 
 	/* ---------- 导入：每行一条，全部走 outbox（离线安全 + 幂等） ---------- */
 
-	async function runImport() {
-		const picked = rows.filter((row) => isSelected(row.rowIndex));
+	async function runImport(retry = false) {
+		// 首次导入全部已选行；重试只补做上一轮失败的行（id 不变 → 服务端幂等，不会重复记账）
+		const picked = retry ? failedRows : rows.filter((row) => isSelected(row.rowIndex));
 		if (picked.length === 0) return;
 
+		// 成功数/跳过数在原基础上累加：重试补上一部分成功，跳过（未勾选）语义首次即定
+		const baseOk = retry ? result.ok : 0;
+		const skipped = retry ? result.skipped : rows.length - picked.length;
+
 		phase = 'importing';
+		importTotal = picked.length;
 		done = 0;
 		let ok = 0;
-		let failed = 0;
+		const failures: ImportRow[] = [];
 
 		// 分批：每批并发提交，批间让出主线程 → 进度条能画出来，几百行也不卡死
 		for (const batch of chunk(picked, IMPORT_BATCH_SIZE)) {
@@ -158,18 +180,23 @@
 					)
 				)
 			);
-			ok += settled.filter((s) => s.status === 'fulfilled').length;
-			failed += settled.filter((s) => s.status === 'rejected').length;
+			settled.forEach((outcome, i) => {
+				if (outcome.status === 'fulfilled') ok += 1;
+				else failures.push(batch[i]);
+			});
 			done += batch.length;
 			await new Promise((resolve) => setTimeout(resolve, 0));
 		}
 
-		result = { ok, failed, skipped: rows.length - picked.length };
+		failedRows = failures;
+		result = { ok: baseOk + ok, failed: failures.length, skipped };
 		phase = 'done';
-		// 汇总 toast 停留片刻后跳回账本（用户也可立即点按钮）
-		setTimeout(() => {
-			if (phase === 'done') void goto('/ledger');
-		}, 1800);
+		// 全部成功才自动跳回账本；有失败则停留在完成页，让用户看清失败条数并重试（错误态齐备）
+		if (failures.length === 0) {
+			setTimeout(() => {
+				if (phase === 'done') void goto('/ledger');
+			}, 1800);
+		}
 	}
 </script>
 
@@ -266,8 +293,14 @@
 			{/if}
 		</section>
 
+		{#if truncated}
+			<p class="trunc-note" role="note">
+				已解析 <b class="tnum">{summary.total}</b> 条，仅展示前 {IMPORT_PREVIEW_LIMIT} 条供核对；未展示的行按建议默认导入。需逐条核对或改分类，请按月份分开导出后再试。
+			</p>
+		{/if}
+
 		<ul class="rows" aria-label="待导入的账目">
-			{#each rows as row (row.rowIndex)}
+			{#each visibleRows as row (row.rowIndex)}
 				<li class="row" class:dup={row.duplicate} class:off={!isSelected(row.rowIndex)}>
 					<button
 						type="button"
@@ -323,23 +356,33 @@
 		>
 			<div class="progress-fill" style:width="{progressPct}%"></div>
 		</div>
-		<p class="hint tnum">{done} / {summary.selected} 条 · 已写入本地，联网后自动同步</p>
+		<p class="hint tnum">{done} / {importTotal} 条 · 已写入本地，联网后自动同步</p>
 	</section>
-{:else}
+{:else if result.failed === 0}
 	<section class="card" aria-label="导入完成">
 		<EmptyState
 			emoji="✅"
 			title="导入完成"
-			description="成功 {result.ok} 条 · 跳过 {result.skipped} 条{result.failed > 0
-				? ` · 失败 ${result.failed} 条`
-				: ''}"
+			description="成功 {result.ok} 条 · 跳过 {result.skipped} 条"
 			actionLabel="回到账本"
 			onaction={() => void goto('/ledger')}
 		/>
 	</section>
 	<div class="toast" role="status">
-		已导入 {result.ok} 条，跳过 {result.skipped} 条{result.failed > 0 ? `，失败 ${result.failed} 条` : ''}
+		已导入 {result.ok} 条，跳过 {result.skipped} 条
 	</div>
+{:else}
+	<section class="card" aria-label="导入结果">
+		<EmptyState
+			emoji="⚠️"
+			title="有 {result.failed} 条没导入成功"
+			description="成功 {result.ok} 条 · 跳过 {result.skipped} 条 · 失败 {result.failed} 条。失败的记录可直接重试，同一条不会重复记账。"
+		/>
+		<div class="done-actions">
+			<Button block onclick={() => void runImport(true)}>重试失败的 {result.failed} 条</Button>
+			<Button block variant="ghost" onclick={() => void goto('/ledger')}>先回账本</Button>
+		</div>
+	</section>
 {/if}
 
 <!-- 改单行分类（复用 CategoryPicker） -->
@@ -511,6 +554,22 @@
 		cursor: pointer;
 	}
 
+	/* ---- 截断提示 ---- */
+	.trunc-note {
+		margin: 0 0 12px;
+		padding: 12px 16px;
+		border-radius: var(--radius-btn);
+		background: color-mix(in srgb, var(--brand) 8%, transparent);
+		border: 1px solid color-mix(in srgb, var(--brand) 24%, transparent);
+		color: var(--ink-2);
+		font-size: 0.75rem; /* 12 辅助 */
+		line-height: 1.5;
+	}
+
+	.trunc-note b {
+		color: var(--ink);
+	}
+
 	/* ---- 行列表 ---- */
 	.rows {
 		list-style: none;
@@ -669,6 +728,13 @@
 		height: 100%;
 		background: var(--brand);
 		transition: width var(--dur-fast) var(--ease);
+	}
+
+	/* ---- 完成页操作（失败停留时的重试 / 返回） ---- */
+	.done-actions {
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
 	}
 
 	/* ---- 完成 toast ---- */

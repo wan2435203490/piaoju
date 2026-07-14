@@ -89,13 +89,13 @@ func wantCode(t *testing.T, err error, code int) {
 
 // dupCols 与 sqlSelectDupCandidates 列序一一对应。
 func dupCols() *sqlmock.Rows {
-	return sqlmock.NewRows([]string{"amount_cents", "direction", "occurred_at"})
+	return sqlmock.NewRows([]string{"amount_cents", "occurred_at"})
 }
 
 // expectNoDups 期望一次批量查重 query（不是每行一个 —— 期望只声明一次，多查即失败），返回空候选集。
 func expectNoDups(mock sqlmock.Sqlmock) {
 	mock.ExpectQuery(regexp.QuoteMeta(sqlSelectDupCandidates)).
-		WithArgs(uidA, sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WithArgs(uidA, sqlmock.AnyArg(), sqlmock.AnyArg(), maxDupCandidates).
 		WillReturnRows(dupCols())
 }
 
@@ -186,19 +186,20 @@ func TestPreviewAlipayGBK(t *testing.T) {
 func TestPreviewMarksDuplicates(t *testing.T) {
 	svc, mock := newTestService(t)
 
-	// 账单最早 2026-07-10T04:30:45Z、最晚 2026-07-12T12:00:00Z → 查询窗口各外扩 60s。
-	lo := utc("2026-07-10T04:30:45Z").Add(-dupWindow)
-	hi := utc("2026-07-12T12:00:00Z").Add(dupWindow)
+	// 契约 §6.2：duplicate = 同金额 + 同时刻（精确相等，不看方向、不设时间窗）。
+	// 账单最早 2026-07-10T04:30:45Z、最晚 2026-07-12T12:00:00Z → 查询区间即 [lo, hi]（无外扩）。
+	lo := utc("2026-07-10T04:30:45Z")
+	hi := utc("2026-07-12T12:00:00Z")
 
 	mock.ExpectQuery(regexp.QuoteMeta(sqlSelectDupCandidates)).
-		WithArgs(uidA, lo, hi).
+		WithArgs(uidA, lo, hi, maxDupCandidates).
 		WillReturnRows(dupCols().
-			// 同金额 + 同方向 + 相差 30s（<60s）→ 命中瑞幸那笔
-			AddRow(1990, "expense", utc("2026-07-10T04:31:15Z")).
-			// 同金额同方向但相差 90s（>60s）→ 不算重复（滴滴那笔）
-			AddRow(123450, "expense", utc("2026-07-11T00:06:30Z")).
-			// 同时刻同金额但方向不同 → 不算重复（红包那笔）
-			AddRow(6600, "expense", utc("2026-07-12T12:00:00Z")))
+			// 同金额 + 同时刻 → 命中瑞幸那笔（expense 1990 @04:30:45）
+			AddRow(1990, utc("2026-07-10T04:30:45Z")).
+			// 同金额但相差 30s（≠ 同时刻）→ 不算重复：证明时间窗已移除（滴滴那笔 @00:05:00）
+			AddRow(123450, utc("2026-07-11T00:05:30Z")).
+			// 同金额 + 同时刻，库中方向不同也算重复 → 命中红包那笔（bill income 6600 @12:00:00）
+			AddRow(6600, utc("2026-07-12T12:00:00Z")))
 
 	res, err := svc.preview(context.Background(), uidA, SourceWechat, []byte(wechatCSV))
 	if err != nil {
@@ -206,11 +207,11 @@ func TestPreviewMarksDuplicates(t *testing.T) {
 	}
 	mustMeet(t, mock)
 
-	if res.Duplicates != 1 {
-		t.Fatalf("duplicates = %d, want 1", res.Duplicates)
+	if res.Duplicates != 2 {
+		t.Fatalf("duplicates = %d, want 2", res.Duplicates)
 	}
 	got := []bool{res.Items[0].Duplicate, res.Items[1].Duplicate, res.Items[2].Duplicate}
-	if want := []bool{true, false, false}; got[0] != want[0] || got[1] != want[1] || got[2] != want[2] {
+	if want := []bool{true, false, true}; got[0] != want[0] || got[1] != want[1] || got[2] != want[2] {
 		t.Fatalf("duplicate flags = %v, want %v", got, want)
 	}
 }
@@ -267,6 +268,28 @@ func TestParseUnsupportedSource(t *testing.T) {
 	wantCode(t, err, apperr.CodeUnsupportedEnum)
 }
 
+// TestParseRowCap 恶意/畸形文件（超行数上限）→ 40001，且不会把整份读进内存（DoS 防御）。
+// 用 maxRows+2 条纯逗号行触发行数上限；解析在越限时立即中止。
+func TestParseRowCap(t *testing.T) {
+	csv := strings.Repeat(",\n", maxRows+2)
+	_, err := parse(SourceWechat, []byte(csv))
+	wantCode(t, err, apperr.CodeInvalidParam)
+}
+
+// TestParseColCap 单行列数超上限（如 5MB 全逗号挤在一行）→ 40001，不建百万字段行。
+func TestParseColCap(t *testing.T) {
+	csv := strings.Repeat(",", maxCols+1) + "\n"
+	_, err := parse(SourceWechat, []byte(csv))
+	wantCode(t, err, apperr.CodeInvalidParam)
+}
+
+// TestParseRowCapAllowsLegitBill maxRows 之内的正常账单不受影响（不误伤）。
+func TestParseRowCapAllowsLegitBill(t *testing.T) {
+	if _, err := parse(SourceWechat, []byte(wechatCSV)); err != nil {
+		t.Fatalf("legit bill within caps must parse: %v", err)
+	}
+}
+
 // TestParseHeaderAliases 表头按名映射：列顺序变化 / 旧版列名（金额（元）全角括号、交易状态）照吃。
 func TestParseHeaderAliases(t *testing.T) {
 	csv := "支付宝交易记录明细查询\n" +
@@ -303,6 +326,9 @@ func TestParseAmountCents(t *testing.T) {
 		{"12000", 1200000},
 		{"0.05", 5},
 		{"-12.30", 1230}, // 方向由「收/支」列决定，金额取绝对值
+		{"0.00", 0},      // 0 元行：允许导入成 amountCents=0
+		{"0", 0},
+		{"10000000000.00", maxAmountCents}, // 上界（100 亿元）恰好放行
 	}
 	for _, c := range cases {
 		got, err := parseAmountCents(c.in)
@@ -310,7 +336,9 @@ func TestParseAmountCents(t *testing.T) {
 			t.Errorf("parseAmountCents(%q) = %d, %v; want %d", c.in, got, err, c.want)
 		}
 	}
-	for _, bad := range []string{"", "abc", "¥", "/"} {
+	// 溢出/越界必须报错，不能静默回绕成负额（否则绕过 parser 到 sync/push 才被拒）。
+	// "92233720368547759" 是合法 int64，但 *100 会溢出成负 amountCents。
+	for _, bad := range []string{"", "abc", "¥", "/", "99999999999999999999", "92233720368547759.00"} {
 		if _, err := parseAmountCents(bad); err == nil {
 			t.Errorf("parseAmountCents(%q): want error", bad)
 		}

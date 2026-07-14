@@ -30,6 +30,20 @@ var cst = time.FixedZone("CST", 8*60*60)
 // maxNoteLen 对齐 migrations note VARCHAR(500)。
 const maxNoteLen = 500
 
+// maxAmountCents 金额上界（1e12 分 = 100 亿元）。个人账单绝无可能超过，超过即视为脏数据。
+// 关键作用：拦住 yuan*100 的 int64 回绕——合法 int64 的 yuan（如 92233720368547759）
+// 乘 100 会静默溢出成负 amountCents，绕过 parser 直到 sync/push 才被拒（用户只见「失败 1 条」无法定位）。
+const maxAmountCents = 1_000_000_000_000
+
+// CSV 解析硬上限（DoS 防御）。5MB 上传体在 ReadAll + FieldsPerRecord=-1 下会被放大
+// 几十倍：全逗号文件 → 数百万空字段常驻堆 + 秒级 CPU，几个并发即可打爆容器。
+// 逐行 r.Read() 流式解析 + 行/列上限，超限直接回 40001（不是合法账单格式）。
+// 账单实际 ~12 列、个人年账单远不到 5 万行，这里留足冗余仍把堆控制在数十 MB。
+const (
+	maxRows = 50000 // 记录行数上限（含前置说明行）
+	maxCols = 64    // 单行列数上限
+)
+
 // 归一化后的列语义键。
 const (
 	colTime         = "time"         // 交易时间
@@ -127,9 +141,23 @@ func parse(source string, data []byte) ([]parsedRow, error) {
 	r.LazyQuotes = true    // 账单里常见未转义的裸引号（如 商品名 22"显示器）
 	r.TrimLeadingSpace = true
 
-	records, err := r.ReadAll()
-	if err != nil {
-		return nil, badFormat("csv parse failed: not a valid %s bill export", source)
+	// 流式逐行读，替代 r.ReadAll()：硬限行数/列数，防 5MB 恶意 CSV 放大堆/CPU。
+	records := make([][]string, 0, 256)
+	for {
+		rec, err := r.Read()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, badFormat("csv parse failed: not a valid %s bill export", source)
+		}
+		if len(rec) > maxCols {
+			return nil, badFormat("csv has too many columns (>%d): not a valid %s bill export", maxCols, source)
+		}
+		records = append(records, rec)
+		if len(records) > maxRows {
+			return nil, badFormat("csv has too many rows (>%d): not a valid %s bill export", maxRows, source)
+		}
 	}
 
 	cols, headerIdx := findHeader(records, aliases)
@@ -350,6 +378,10 @@ func parseAmountCents(s string) (int64, error) {
 	yuan, err := strconv.ParseInt(intPart, 10, 64)
 	if err != nil {
 		return 0, fmt.Errorf("%w %q", errBadAmount, s)
+	}
+	// 量级校验必须在 *100 之前：yuan 是合法 int64 不代表 yuan*100 不溢出。
+	if yuan > maxAmountCents/100 {
+		return 0, fmt.Errorf("%w %q (out of range)", errBadAmount, s)
 	}
 	switch len(fracPart) {
 	case 0:

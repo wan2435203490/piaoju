@@ -3,7 +3,6 @@
 	import Amount from '$lib/components/Amount.svelte';
 	import Rating from '$lib/components/ticket/Rating.svelte';
 	import { KIND_META, fmtDate } from '$lib/components/ticket/kinds';
-	import { formatCents } from '$lib/utils/money';
 	import { categoryLabel, ticketVenue, type Superlatives } from './data';
 
 	interface Props {
@@ -67,7 +66,7 @@
 					<span class="tag">🏷️ 花钱最多的分类</span>
 					<span class="main">
 						<span class="title">{categoryLabel(categories, best.topCategory.categoryId)}</span>
-						<span class="strong tnum">¥{formatCents(best.topCategory.cents)}</span>
+						<Amount cents={best.topCategory.cents} direction="expense" />
 					</span>
 					<span class="meta tnum">{best.topCategory.count} 笔（含非票据消费）</span>
 				</div>
