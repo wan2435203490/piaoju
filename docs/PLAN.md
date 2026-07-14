@@ -101,9 +101,18 @@ DoD：与 mock 的 401 refresh 流程联调通过
 - 主线程：真机走查 iOS 安全区/键盘遮挡/暗色，TestFlight
 - 卡点提醒：Apple 开发者账号 $99/年需提前申请
 
-## Wave 6 — 增强（M5，按需单独开卡）
+## Wave 6 — 增强（M5）✅ 四项已交付（`faeda7a` + review 修复 `39d2e22`）
 
-LLM 识票（拍照→结构化 JSON 五票型一个 prompt）· 微信/支付宝 CSV 导入+规则分类 · 年度报告/旅行地图 · 票根分享图 · 预算提醒
+- [x] LLM 识票：拍照→结构化 JSON（json_schema 约束五票型 extra 白名单，一个 prompt 自判 kind）。
+      契约 §6.1；key 走 `PIAOJU_LLM_API_KEY`，未配则端点回 50001、前端隐藏入口，主流程不受影响。
+      `server/internal/vision/`。**待办：配 key + 真票照片人工验 prompt 效果（自动化测不了）**
+- [x] 微信/支付宝 CSV 导入+规则分类：契约 §6.2，只 preview 不 commit，写入走 sync/push 复用幂等/LWW。
+      `server/internal/importer/`（GBK/BOM/表头名映射/查重）+ `web/src/routes/(app)/import/`
+- [x] 票根分享图：Canvas 2D 自绘（html2canvas 超包体红线，禁用）；污染/加载失败降级无照片版式。
+      `web/src/lib/components/share/`
+- [x] 年度报告：票型概览/月度趋势/年度之最/城市足迹。**足迹是条形图不是地图**——凭记忆画简化中国
+      轮廓易错国界/岛屿，不值得为好看担风险。`/year`（「我的」页入口）
+- [ ] 预算提醒：未做（Wave 6 原始清单里的第五项，按需再开卡）
 
 ## 风险登记
 
