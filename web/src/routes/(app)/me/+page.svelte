@@ -10,6 +10,8 @@
 	const user = loadUser();
 	const loggedIn = user !== null && hasSession();
 
+	const currentYear = new Date().getFullYear();
+
 	const joined = (() => {
 		if (!user) return '';
 		const date = new Date(user.createdAt);
@@ -87,6 +89,24 @@
 			</div>
 			<span class="row-value" role="status">{prefersDark ? '🌙 深色' : '☀️ 浅色'}</span>
 		</div>
+
+		<!-- 年度报告（Wave 6）：票型概览 · 城市足迹 · 月度趋势 · 年度之最 -->
+		<a class="row link-row" href="/year">
+			<div class="row-main">
+				<span class="row-label">{currentYear} 年度报告</span>
+				<span class="row-sub">看过的场 · 去过的城 · 花掉的钱</span>
+			</div>
+			<span class="row-value" aria-hidden="true">›</span>
+		</a>
+
+		<!-- 账单导入（W6，PROTOCOL §6.2）：微信/支付宝 CSV → 预览核对 → 走 outbox 写入 -->
+		<a class="row link-row" href="/import">
+			<div class="row-main">
+				<span class="row-label">导入账单</span>
+				<span class="row-sub">微信 / 支付宝 CSV · 自动分类与查重</span>
+			</div>
+			<span class="row-value" aria-hidden="true">›</span>
+		</a>
 
 		<div class="row disabled" aria-disabled="true">
 			<div class="row-main">
@@ -226,6 +246,17 @@
 		flex: none;
 		font-size: 0.875rem; /* 14 正文 */
 		color: var(--ink-2);
+	}
+
+	/* 可点设置行（导入账单入口） */
+	.link-row {
+		text-decoration: none;
+		color: inherit;
+		transition: background-color var(--dur-fast) var(--ease);
+	}
+
+	.link-row:active {
+		background: var(--bg);
 	}
 
 	.row.disabled .row-label,

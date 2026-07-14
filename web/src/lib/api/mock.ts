@@ -10,10 +10,14 @@
 import {
 	ApiError,
 	ERR,
+	IMPORT_MAX_BYTES,
 	type Attachment,
 	type AuthData,
 	type Category,
 	type CategoryInput,
+	type ImportPreviewData,
+	type ImportRow,
+	type ImportSource,
 	type ListPage,
 	type LoginInput,
 	type MonthlyStats,
@@ -23,6 +27,7 @@ import {
 	type SyncPushData,
 	type SyncPullData,
 	type Ticket,
+	type TicketDraft,
 	type TicketInput,
 	type TicketQuery,
 	type TicketStats,
@@ -36,6 +41,8 @@ import {
 	FIXTURE_MONTH,
 	FIXTURE_YEAR,
 	fixtureCategories,
+	fixtureImportRows,
+	fixtureRecognizeDraft,
 	fixtureStatsMonthly,
 	fixtureStatsTickets,
 	fixtureTickets,
@@ -336,6 +343,34 @@ export const mockApi: ApiClient = {
 		};
 		db.uploaded.push(attachment);
 		return clone(attachment);
+	},
+
+	/* ----- 识票（PROTOCOL §6.1）：固定回一张电影票草稿（confidence 0.82） ----- */
+	async recognizeTicket(attachmentId: number): Promise<TicketDraft> {
+		await delay();
+		// 契约 §6.1：草稿基于已上传的附件；未知附件 → 40401（负数临时 id 也在此拦下）
+		if (!getDb().uploaded.some((a) => a.id === attachmentId)) {
+			throw new ApiError(ERR.NOT_FOUND, '资源不存在或无权访问');
+		}
+		return clone(fixtureRecognizeDraft);
+	},
+
+	/* ----- 账单导入预览（PROTOCOL §6.2）：10 行含 2 行疑似重复 ----- */
+	async previewImport(file: File | Blob, source: ImportSource): Promise<ImportPreviewData> {
+		await delay();
+		// 契约 §6.2：>5MB → 41301
+		if (file.size > IMPORT_MAX_BYTES) throw new ApiError(ERR.UPLOAD_REJECTED, '文件超过 5MB 限制');
+		// 契约 §6.2：解析失败 / 不是该来源的账单格式 → 40001（mock 只按扩展名与 MIME 粗判）
+		const name = file instanceof File ? file.name.toLowerCase() : '';
+		const looksCsv = name.endsWith('.csv') || file.type === 'text/csv' || file.type === '';
+		if (!looksCsv) throw new ApiError(ERR.VALIDATION, '不是该来源的账单格式');
+
+		// 支付方式跟随来源；其余字段取 fixture（含 2 行 duplicate=true）
+		const items: ImportRow[] = clone(fixtureImportRows).map((row) => ({
+			...row,
+			paymentMethod: source
+		}));
+		return { items, total: items.length, duplicates: items.filter((r) => r.duplicate).length };
 	},
 
 	/* ----- Stats：fixtures 月份/年份返回预生成数据，其余返回空 ----- */

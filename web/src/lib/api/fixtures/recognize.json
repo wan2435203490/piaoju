@@ -1,0 +1,14 @@
+{
+	"kind": "movie",
+	"title": "沙丘 3",
+	"venue": "万达影城（合生汇店）",
+	"eventTime": "2026-07-11T11:30:00Z",
+	"seat": "9排12座",
+	"extra": {
+		"cinema": "万达影城（合生汇店）",
+		"hall": "IMAX 厅",
+		"filmFormat": "IMAX"
+	},
+	"amountCents": 9900,
+	"confidence": 0.82
+}

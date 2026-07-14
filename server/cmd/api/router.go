@@ -8,6 +8,7 @@ import (
 
 	"piaoju/internal/auth"
 	"piaoju/internal/category"
+	"piaoju/internal/importer"
 	"piaoju/internal/middleware"
 	"piaoju/internal/platform/config"
 	"piaoju/internal/platform/httpx"
@@ -17,6 +18,7 @@ import (
 	"piaoju/internal/ticket"
 	"piaoju/internal/transaction"
 	"piaoju/internal/upload"
+	"piaoju/internal/vision"
 )
 
 // newRouter 组装全局中间件与业务模块路由。
@@ -49,8 +51,12 @@ func newRouter(conn *sql.DB, tm *token.Manager, cfg config.Config) http.Handler 
 			sec.Mount("/categories", category.Routes(conn))
 			sec.Mount("/transactions", transaction.Routes(conn))
 			sec.Mount("/stats", stats.Routes(conn))
+			// 识票（契约 §6.1）：静态路由必须先于 /tickets 挂载，否则被 /tickets/{id} 抢走。
+			// uploadDir 与 upload.Routes 同一个（读的是同一批落盘图片）。
+			sec.Mount("/tickets/recognize", vision.Routes(conn, cfg.UploadDir))
 			sec.Mount("/tickets", ticket.Routes(conn, cfg.JWTSecret))
 			sec.Mount("/uploads", upload.Routes(conn, cfg.UploadDir, cfg.UploadMaxMB, cfg.JWTSecret))
+			sec.Mount("/imports", importer.Routes(conn)) // 账单导入（契约 §6.2）
 			// sync 的 secret 必须与 ticket/upload 同一把（pull 下发附件签名 URL）
 			sec.Mount("/sync", syncmod.Routes(conn, cfg.JWTSecret))
 		})

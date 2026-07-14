@@ -4,8 +4,19 @@
  * - tickets 覆盖五种 kind；transactions 27 条、跨 7 天、含 5 条票关联
  * - stats-*.json 由 transactions/tickets 推导生成，数字互相对账一致
  */
-import type { Category, MonthlyStats, Ticket, TicketStats, Transaction, User } from '../types';
+import type {
+	Category,
+	ImportRow,
+	MonthlyStats,
+	Ticket,
+	TicketDraft,
+	TicketStats,
+	Transaction,
+	User
+} from '../types';
 import categoriesJson from './categories.json';
+import importPreviewJson from './import-preview.json';
+import recognizeJson from './recognize.json';
 import statsMonthlyJson from './stats-monthly.json';
 import statsTicketsJson from './stats-tickets.json';
 import ticketsJson from './tickets.json';
@@ -18,6 +29,12 @@ export const fixtureTransactions = transactionsJson as unknown as Transaction[];
 export const fixtureTickets = ticketsJson as unknown as Ticket[];
 export const fixtureStatsMonthly = statsMonthlyJson as unknown as MonthlyStats;
 export const fixtureStatsTickets = statsTicketsJson as unknown as TicketStats;
+
+/** 识票草稿样本（PROTOCOL §6.1）：一张电影票，confidence 0.82 */
+export const fixtureRecognizeDraft = recognizeJson as unknown as TicketDraft;
+
+/** 账单导入预览样本（PROTOCOL §6.2）：10 行，其中 2 行 duplicate=true */
+export const fixtureImportRows = importPreviewJson as unknown as ImportRow[];
 
 /** fixtures 数据所在的月份 / 年份（mock 对其他区间返回空数据） */
 export const FIXTURE_MONTH = '2026-07';

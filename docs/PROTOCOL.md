@@ -16,7 +16,9 @@
 | 40902 | 幂等冲突（同 id 不同内容且 updatedAt 更旧） |
 | 40401 | 资源不存在或无权访问 |
 | 41301 | 上传文件超限（>10MB）或不支持的图片格式 |
+| 42901 | 识票调用超额/限流（v1.3） |
 | 50000 | 服务端错误 |
+| 50001 | 识票服务未配置（未设 PIAOJU_LLM_API_KEY，v1.3） |
 
 ## 2. Auth
 
@@ -110,6 +112,39 @@ Attachment = { id: number, url: string, thumbUrl: string, w: number, h: number }
 POST /api/v1/uploads   multipart form: file（jpeg/png/webp ≤10MB；heic 由客户端转 jpeg 后上传——Capacitor Camera 默认输出 jpeg，纯 Go 无法解码 heic；服务端遇不支持格式回 41301）
   → data: Attachment    // 服务端：长边>2000 压缩、质量80、生成 480px 缩略图
 GET  /uploads/{path}    // 静态服务，URL 即 Attachment.url（带签名参数防越权）
+```
+
+## 6.1 识票（Wave 6，v1.3 补）
+
+拍照 → 结构化票据草稿。客户端先走 §6 上传拿到 Attachment，再把 attachmentId 交给识别接口；
+返回的是**草稿**（服务端不落库），客户端回填表单、用户确认后才走 §5 建票。
+
+```
+POST /api/v1/tickets/recognize   { attachmentId: number }
+  → data: { kind, title, venue, eventTime, seat, extra, amountCents, confidence: number(0-1) }
+  // 字段语义同 §5 TicketInput 同名字段；识别不出的字段回零值（""/0/{}），不猜
+  // extra 按识别出的 kind 走 §5 的白名单字段
+  // confidence < 0.6 时客户端应提示用户「识别可能不准，请核对」
+
+  // 50001：识票服务未配置（服务端未设 PIAOJU_LLM_API_KEY）——功能可用性与主流程解耦
+  // 42901：识票调用超额/限流，稍后重试
+```
+
+## 6.2 账单导入（Wave 6，v1.3 补）
+
+微信/支付宝账单 CSV → 解析 + 规则分类 + 查重。**只有 preview，没有 commit**：
+解析结果交给客户端，写入统一走 §8 sync/push（离线安全、幂等、复用 LWW）。
+
+```
+POST /api/v1/imports/preview   multipart: file(csv ≤5MB), source: "wechat"|"alipay"
+  → data: { items: [ImportRow], total: number, duplicates: number }
+
+ImportRow = { rowIndex: number, amountCents, direction, occurredAt(RFC3339),
+              note, paymentMethod, categoryId,      // categoryId 为规则匹配的建议值
+              duplicate: boolean }                   // 与库中同金额+同时刻的交易撞上 → 建议跳过
+
+  // 40001：CSV 无法解析 / 不是该来源的账单格式
+  // 41301：文件超限（>5MB）
 ```
 
 ## 7. Stats

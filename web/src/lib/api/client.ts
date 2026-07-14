@@ -19,6 +19,8 @@ import {
 	type Category,
 	type CategoryInput,
 	type Envelope,
+	type ImportPreviewData,
+	type ImportSource,
 	type ListPage,
 	type LoginInput,
 	type MonthlyStats,
@@ -28,6 +30,7 @@ import {
 	type SyncPushData,
 	type SyncPullData,
 	type Ticket,
+	type TicketDraft,
 	type TicketInput,
 	type TicketQuery,
 	type TicketStats,
@@ -180,6 +183,19 @@ export interface ApiClient {
 	/** POST /uploads（jpeg/png/webp/heic ≤10MB） */
 	upload(file: File | Blob): Promise<Attachment>;
 
+	/**
+	 * POST /tickets/recognize（§6.1）：已上传的票面照 → 票据草稿（服务端不落库）。
+	 * 50001 = 识票服务未配置（功能与主流程解耦，UI 应隐藏入口）；42901 = 限流。
+	 */
+	recognizeTicket(attachmentId: number): Promise<TicketDraft>;
+
+	/**
+	 * POST /imports/preview（§6.2）：账单 CSV → 解析 + 规则分类 + 查重。
+	 * 只有 preview 没有 commit —— 写入一律走 outbox（离线安全 + 幂等）。
+	 * 40001 = 不是该来源的账单格式；41301 = 文件 >5MB。
+	 */
+	previewImport(file: File | Blob, source: ImportSource): Promise<ImportPreviewData>;
+
 	/** GET /stats/monthly?month=2026-07 */
 	statsMonthly(month: string): Promise<MonthlyStats>;
 	/** GET /stats/tickets?year=2026 */
@@ -249,6 +265,16 @@ const httpApi: ApiClient = {
 		const form = new FormData();
 		form.append('file', file);
 		return request<Attachment>('POST', '/uploads', { form });
+	},
+
+	recognizeTicket: (attachmentId) =>
+		request<TicketDraft>('POST', '/tickets/recognize', { body: { attachmentId } }),
+
+	previewImport: (file, source) => {
+		const form = new FormData();
+		form.append('file', file);
+		form.append('source', source);
+		return request<ImportPreviewData>('POST', '/imports/preview', { form });
 	},
 
 	statsMonthly: (month) => request<MonthlyStats>('GET', '/stats/monthly', { query: { month } }),

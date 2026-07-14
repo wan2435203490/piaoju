@@ -38,10 +38,14 @@ export const ERR = {
 	EMAIL_TAKEN: 40901,
 	/** 幂等冲突（同 id 不同内容且 updatedAt 更旧） */
 	IDEMPOTENCY_CONFLICT: 40902,
-	/** 上传文件超限（>10MB 或非图片） */
+	/** 上传文件超限（>10MB 或非图片；导入 CSV 为 >5MB） */
 	UPLOAD_REJECTED: 41301,
+	/** 识票调用超额/限流（PROTOCOL §6.1，v1.3） */
+	RECOGNIZE_RATE_LIMITED: 42901,
 	/** 服务端错误 */
-	INTERNAL: 50000
+	INTERNAL: 50000,
+	/** 识票服务未配置（服务端未设 PIAOJU_LLM_API_KEY，PROTOCOL §6.1，v1.3） */
+	RECOGNIZE_UNAVAILABLE: 50001
 } as const;
 
 export type ErrCode = (typeof ERR)[keyof typeof ERR];
@@ -362,3 +366,58 @@ export interface SyncPullData {
 	nextCursor: string;
 	hasMore: boolean;
 }
+
+/* ============ 识票（PROTOCOL §6.1，v1.3） ============ */
+
+/**
+ * POST /tickets/recognize → data。
+ * **草稿**，服务端不落库：客户端回填表单、用户确认后才走 §5 建票。
+ * 识别不出的字段回零值（""/0/{}），不猜。
+ */
+export interface TicketDraft<K extends TicketKind = TicketKind> {
+	kind: K;
+	title: string;
+	venue: string;
+	/** RFC3339 UTC；识别不出为 '' */
+	eventTime: string;
+	seat: string;
+	/** 按识别出的 kind 走 §5 的 extra 白名单字段 */
+	extra: ExtraByKind[K];
+	amountCents: number;
+	/** 0-1；< 0.6 时客户端应提示「识别可能不准，请核对」 */
+	confidence: number;
+}
+
+/** 识别结果可信度下限（低于此值提示用户核对，契约 §6.1） */
+export const RECOGNIZE_CONFIDENCE_FLOOR = 0.6;
+
+/* ============ 账单导入（PROTOCOL §6.2，v1.3） ============ */
+
+export type ImportSource = 'wechat' | 'alipay';
+
+export const IMPORT_SOURCES = ['wechat', 'alipay'] as const satisfies readonly ImportSource[];
+
+/** POST /imports/preview 返回的单行（只有 preview，没有 commit：写入走 outbox） */
+export interface ImportRow {
+	rowIndex: number;
+	amountCents: number;
+	direction: Direction;
+	/** RFC3339 UTC */
+	occurredAt: string;
+	note: string;
+	paymentMethod: PaymentMethod;
+	/** 规则匹配的建议分类 */
+	categoryId: number;
+	/** 与库中同金额 + 同时刻的交易撞上 → 建议跳过 */
+	duplicate: boolean;
+}
+
+/** POST /imports/preview → data */
+export interface ImportPreviewData {
+	items: ImportRow[];
+	total: number;
+	duplicates: number;
+}
+
+/** 导入 CSV 体积上限（契约 §6.2：>5MB → 41301） */
+export const IMPORT_MAX_BYTES = 5 * 1024 * 1024;

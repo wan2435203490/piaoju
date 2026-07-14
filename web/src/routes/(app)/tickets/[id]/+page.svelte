@@ -15,6 +15,7 @@
 	import Skeleton from '$lib/components/Skeleton.svelte';
 	import Rating from '$lib/components/ticket/Rating.svelte';
 	import TicketCard from '$lib/components/ticket/TicketCard.svelte';
+	import TicketShareCard from '$lib/components/share/TicketShareCard.svelte';
 	import {
 		KIND_META,
 		PAYMENT_LABEL,
@@ -194,6 +195,9 @@
 				<p class="memo">{ticket.memo}</p>
 			{/if}
 		</section>
+
+		<!-- 分享入口：canvas 自绘票根图（W7） -->
+		<TicketShareCard {ticket} />
 
 		<div class="actions">
 			<Button variant="ghost" block onclick={() => void goto(`/tickets/${ticket!.id}/edit`)}>

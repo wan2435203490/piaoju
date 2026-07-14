@@ -1,3 +1,11 @@
+<script module lang="ts">
+	/**
+	 * 识票服务未配置（50001）→ 整个会话内不再渲染「拍照识别」入口。
+	 * 模块级：换页/重开表单也不复现，避免反复让用户点一个注定失败的按钮（W6 任务卡）。
+	 */
+	let recognizeOffForSession = false;
+</script>
+
 <script lang="ts">
 	/**
 	 * 五套票型表单（create/edit 共用，PROTOCOL §5 TicketInput 逐字段对齐）：
@@ -6,19 +14,22 @@
 	 * - 照片：outbox.upload 占位上传（mock 返回内联占位图），attachmentIds 随单提交
 	 * - 新建 id 在挂载时生成一次（客户端 UUIDv4，重试幂等 upsert 不产生重复单）
 	 * - 编辑不提交 occurredAt（Ticket 内嵌交易摘要不含该字段，避免盲改）
+	 * - 识票（W6，PROTOCOL §6.1）：仅新建模式。上传票面照 → recognize → **回填草稿**，
+	 *   永不自动提交；离线（附件为负数临时 id）不可识别；50001 后本会话隐藏入口。
 	 */
 	import { untrack } from 'svelte';
-	import { api } from '$lib/api/client';
+	import { ApiError, api } from '$lib/api/client';
 	import type {
 		Attachment,
 		Category,
 		PaymentMethod,
 		Ticket,
+		TicketDraft,
 		TicketExtra,
 		TicketInput,
 		TicketKind
 	} from '$lib/api/types';
-	import { PAYMENT_METHODS, TICKET_KINDS } from '$lib/api/types';
+	import { ERR, PAYMENT_METHODS, RECOGNIZE_CONFIDENCE_FLOOR, TICKET_KINDS } from '$lib/api/types';
 	import Button from '$lib/components/Button.svelte';
 	import CategoryPicker from '$lib/components/CategoryPicker.svelte';
 	import { outbox } from '$lib/db/outbox';
@@ -146,6 +157,114 @@
 		attachments = attachments.filter((a) => a.id !== id);
 	}
 
+	/* ---------- 识票（PROTOCOL §6.1；仅新建模式） ---------- */
+
+	let recognizeInput = $state<HTMLInputElement | null>(null);
+	let recognizing = $state(false);
+	/** 50001：识票服务未开启 → 本会话隐藏入口 */
+	let recognizeOff = $state(recognizeOffForSession);
+	/** 识别失败提示：不打断，用户照常手填 */
+	let recognizeError = $state('');
+	/** confidence < 0.6 → 顶部提醒核对 */
+	let lowConfidence = $state(false);
+	/** 本次识别回填了哪些字段（'title' / 'amount' / 'extra:hall' …），用于视觉反馈 */
+	let filledKeys = $state<string[]>([]);
+	/** 离线时 outbox.upload 返回负数临时 id，识票不可用 */
+	let online = $state(true);
+
+	$effect(() => {
+		online = navigator.onLine;
+		const on = () => (online = true);
+		const off = () => (online = false);
+		window.addEventListener('online', on);
+		window.addEventListener('offline', off);
+		return () => {
+			window.removeEventListener('online', on);
+			window.removeEventListener('offline', off);
+		};
+	});
+
+	const isFilled = (key: string) => filledKeys.includes(key);
+	/** 识别入口可见性：编辑模式不给（票型锁定）、服务未开启后永久隐藏 */
+	const showRecognize = $derived(!isEdit && !recognizeOff);
+
+	/** 草稿 → 表单（只回填非零值，永不自动提交；契约 §6.1 识别不出的字段回零值） */
+	function applyDraft(draft: TicketDraft) {
+		const keys: string[] = [];
+		if (draft.kind && draft.kind !== kind) switchKind(draft.kind); // 换型会重置 extra，须先做
+		if (draft.title) {
+			title = draft.title;
+			keys.push('title');
+		}
+		if (draft.venue) {
+			venue = draft.venue;
+			keys.push('venue');
+		}
+		const eventLocal = isoToLocalInput(draft.eventTime);
+		if (eventLocal) {
+			eventTimeLocal = eventLocal;
+			keys.push('eventTime');
+		}
+		if (draft.seat) {
+			seat = draft.seat;
+			keys.push('seat');
+		}
+		if (draft.amountCents > 0) {
+			amountYuan = centsToYuanInput(draft.amountCents);
+			keys.push('amount');
+		}
+		// extra 只取当前票型白名单内的键（契约 §5 extra 表），未知键丢弃
+		const src = (draft.extra ?? {}) as Record<string, string>;
+		const next = { ...extra };
+		for (const def of EXTRA_FIELDS[draft.kind ?? kind]) {
+			const value = src[def.key];
+			if (!value) continue;
+			next[def.key] = def.type === 'datetime' ? isoToLocalInput(value) : value;
+			keys.push(`extra:${def.key}`);
+		}
+		extra = next;
+		filledKeys = keys;
+		lowConfidence = draft.confidence < RECOGNIZE_CONFIDENCE_FLOOR;
+	}
+
+	async function onRecognizePicked(event: Event) {
+		const input = event.currentTarget as HTMLInputElement;
+		const file = input.files?.[0];
+		input.value = '';
+		if (!file || recognizing) return;
+
+		recognizing = true;
+		recognizeError = '';
+		lowConfidence = false;
+		filledKeys = [];
+		try {
+			// 1）先上传（票面照同时存进本票的附件里，不白拍）
+			const attachment = await outbox.upload(file);
+			attachments.push(attachment);
+			// 2）离线：附件是本地负数临时 id，服务端无从识别 → 提示联网后再试
+			if (attachment.id < 0) {
+				recognizeError = '照片已保存，联网后可识别';
+				return;
+			}
+			// 3）识别 → 回填草稿（用户可改，必须手动提交）
+			applyDraft(await api.recognizeTicket(attachment.id));
+		} catch (error) {
+			if (error instanceof ApiError && error.code === ERR.RECOGNIZE_UNAVAILABLE) {
+				// 50001：功能与主流程解耦 —— 本会话不再显示入口
+				recognizeOffForSession = true;
+				recognizeOff = true;
+				recognizeError = '识票服务未开启，请手动填写';
+			} else if (error instanceof ApiError && error.code === ERR.RECOGNIZE_RATE_LIMITED) {
+				recognizeError = '识别次数已达上限，请稍后重试';
+			} else {
+				// 其他错误不打断：用户照常手填
+				recognizeError = '识别失败，可手动填写';
+			}
+		} finally {
+			recognizing = false;
+		}
+	}
+
 	/* ---------- 校验 + 提交 ---------- */
 
 	let validationError = $state('');
@@ -202,7 +321,67 @@
 	const shownError = $derived(validationError || error);
 </script>
 
+<!-- 识别回填标记（视觉反馈：哪些字段是机器填的） -->
+{#snippet recBadge(shown: boolean)}
+	{#if shown}
+		<span class="rec-badge">识</span>
+	{/if}
+{/snippet}
+
 <form class="form" onsubmit={submit} novalidate>
+	<!-- 识票入口（PROTOCOL §6.1，仅新建；50001 后本会话隐藏） -->
+	{#if showRecognize}
+		<section class="section rec" aria-label="拍照识别">
+			<div class="rec-row">
+				<button
+					type="button"
+					class="rec-btn"
+					disabled={recognizing || !online}
+					aria-busy={recognizing}
+					onclick={() => recognizeInput?.click()}
+				>
+					{#if recognizing}
+						<span class="rec-spin" aria-hidden="true"></span>识别中…
+					{:else}
+						<span aria-hidden="true">📷</span> 拍照识别
+					{/if}
+				</button>
+				<p class="rec-hint">
+					{online
+						? '拍一张票面，自动填好下面的字段；识别结果可改，不会自动保存'
+						: '离线中，联网后可识别（照片仍可先存下来）'}
+				</p>
+			</div>
+			<input
+				bind:this={recognizeInput}
+				type="file"
+				accept="image/jpeg,image/png,image/webp"
+				capture="environment"
+				class="file-hidden"
+				onchange={onRecognizePicked}
+				aria-hidden="true"
+				tabindex="-1"
+			/>
+		</section>
+
+		{#if lowConfidence}
+			<!-- 契约 §6.1：confidence < 0.6 → 提示核对 -->
+			<div class="rec-warn" role="status">
+				<span aria-hidden="true">⚠️</span> 识别可能不准，请核对下面的字段
+			</div>
+		{/if}
+
+		{#if filledKeys.length > 0}
+			<div class="rec-ok" role="status">
+				已按识别结果填好 {filledKeys.length} 处（带「识」标记的字段），确认无误后再保存
+			</div>
+		{/if}
+
+		{#if recognizeError}
+			<p class="field-error" role="alert">{recognizeError}</p>
+		{/if}
+	{/if}
+
 	<!-- 票型（新建可选；编辑锁定） -->
 	<section class="section" aria-label="票型">
 		{#if isEdit}
@@ -231,13 +410,25 @@
 		{/if}
 	</section>
 
-	<!-- 基本信息 -->
+	<!-- 基本信息（识别回填的字段带「识」标记） -->
 	<section class="section" aria-label="基本信息">
-		<Field id="tk-title" label="标题" bind:value={title} placeholder="片名 / 演出 / 行程…" />
-		<Field id="tk-venue" label="场馆 / 地点" bind:value={venue} placeholder="影院、剧场、车站…" />
+		<div class="fw" class:filled={isFilled('title')}>
+			<Field id="tk-title" label="标题" bind:value={title} placeholder="片名 / 演出 / 行程…" />
+			{@render recBadge(isFilled('title'))}
+		</div>
+		<div class="fw" class:filled={isFilled('venue')}>
+			<Field id="tk-venue" label="场馆 / 地点" bind:value={venue} placeholder="影院、剧场、车站…" />
+			{@render recBadge(isFilled('venue'))}
+		</div>
 		<div class="pair">
-			<Field id="tk-time" label="时间" type="datetime-local" bind:value={eventTimeLocal} />
-			<Field id="tk-seat" label="座位" bind:value={seat} placeholder="9排12座" />
+			<div class="fw" class:filled={isFilled('eventTime')}>
+				<Field id="tk-time" label="时间" type="datetime-local" bind:value={eventTimeLocal} />
+				{@render recBadge(isFilled('eventTime'))}
+			</div>
+			<div class="fw" class:filled={isFilled('seat')}>
+				<Field id="tk-seat" label="座位" bind:value={seat} placeholder="9排12座" />
+				{@render recBadge(isFilled('seat'))}
+			</div>
 		</div>
 	</section>
 
@@ -246,13 +437,16 @@
 		<section class="section" aria-label="{KIND_META[kind].label}信息">
 			<h2 class="section-title">{KIND_META[kind].label}信息</h2>
 			{#each EXTRA_FIELDS[kind] as def (kind + def.key)}
-				<Field
-					id="tk-extra-{def.key}"
-					label={def.label}
-					type={def.type === 'datetime' ? 'datetime-local' : 'text'}
-					bind:value={extra[def.key]}
-					placeholder={def.placeholder ?? ''}
-				/>
+				<div class="fw" class:filled={isFilled(`extra:${def.key}`)}>
+					<Field
+						id="tk-extra-{def.key}"
+						label={def.label}
+						type={def.type === 'datetime' ? 'datetime-local' : 'text'}
+						bind:value={extra[def.key]}
+						placeholder={def.placeholder ?? ''}
+					/>
+					{@render recBadge(isFilled(`extra:${def.key}`))}
+				</div>
 			{/each}
 		</section>
 	{/if}
@@ -308,13 +502,16 @@
 	<!-- 共享交易段：金额 / 分类 / 支付方式 / 记账时间 -->
 	<section class="section" aria-label="记一笔账">
 		<h2 class="section-title">记一笔账</h2>
-		<Field
-			id="tk-amount"
-			label="金额（元）"
-			bind:value={amountYuan}
-			placeholder="0.00"
-			inputmode="decimal"
-		/>
+		<div class="fw" class:filled={isFilled('amount')}>
+			<Field
+				id="tk-amount"
+				label="金额（元）"
+				bind:value={amountYuan}
+				placeholder="0.00"
+				inputmode="decimal"
+			/>
+			{@render recBadge(isFilled('amount'))}
+		</div>
 		<div class="sub-block">
 			<span class="sub-label" id="tk-category-label">分类</span>
 			{#if categoryError}
@@ -376,6 +573,110 @@
 		font-size: 0.875rem; /* 14 正文 */
 		font-weight: 600;
 		color: var(--ink-2);
+	}
+
+	/* ---- 识票入口（§6.1） ---- */
+	.rec-row {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		flex-wrap: wrap;
+	}
+
+	.rec-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 8px;
+		flex: none;
+		min-height: 44px; /* 触控目标 */
+		padding: 0 16px;
+		border: 1px dashed var(--brand);
+		border-radius: var(--radius-btn);
+		background: color-mix(in srgb, var(--brand) 8%, transparent);
+		color: var(--brand);
+		font-family: inherit;
+		font-size: 1rem; /* 16 强调 */
+		font-weight: 600;
+		cursor: pointer;
+		transition:
+			transform var(--dur-fast) var(--ease),
+			opacity var(--dur-fast) var(--ease);
+	}
+
+	.rec-btn:active:not(:disabled) {
+		transform: scale(0.97);
+	}
+
+	.rec-btn:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.rec-spin {
+		width: 16px;
+		height: 16px;
+		flex: none;
+		border: 2px solid currentColor;
+		border-top-color: transparent;
+		border-radius: 50%;
+		animation: spin 0.8s linear infinite; /* prefers-reduced-motion 由 app.css 全局收敛 */
+	}
+
+	@keyframes spin {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+
+	.rec-hint {
+		flex: 1;
+		min-width: 12ch;
+		margin: 0;
+		font-size: 0.75rem; /* 12 辅助 */
+		color: var(--ink-2);
+	}
+
+	/* 提示条：低可信度（暖色警示）/ 回填成功（accent） */
+	.rec-warn,
+	.rec-ok {
+		font-size: 0.875rem; /* 14 正文 */
+		border-radius: var(--radius-btn);
+		padding: 12px;
+	}
+
+	.rec-warn {
+		color: var(--ink);
+		background: color-mix(in srgb, var(--brand) 14%, transparent);
+		border: 1px solid color-mix(in srgb, var(--brand) 45%, transparent);
+	}
+
+	.rec-ok {
+		color: var(--ink);
+		background: color-mix(in srgb, var(--accent) 10%, transparent);
+		border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+	}
+
+	/* 字段回填标记 */
+	.fw {
+		position: relative;
+	}
+
+	.rec-badge {
+		position: absolute;
+		top: 0;
+		right: 0;
+		font-size: 0.75rem; /* 12 辅助 */
+		font-weight: 600;
+		line-height: 1;
+		padding: 2px 6px;
+		border-radius: var(--radius-chip);
+		background: color-mix(in srgb, var(--accent) 16%, transparent);
+		color: var(--accent);
+	}
+
+	.fw.filled :global(.input) {
+		border-color: color-mix(in srgb, var(--accent) 60%, transparent);
 	}
 
 	/* ---- 票型选择 ---- */

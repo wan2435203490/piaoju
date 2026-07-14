@@ -1,0 +1,102 @@
+[
+	{
+		"rowIndex": 1,
+		"amountCents": 2800,
+		"direction": "expense",
+		"occurredAt": "2026-07-13T04:12:00Z",
+		"note": "肯德基宅急送",
+		"paymentMethod": "wechat",
+		"categoryId": 1,
+		"duplicate": false
+	},
+	{
+		"rowIndex": 2,
+		"amountCents": 1600,
+		"direction": "expense",
+		"occurredAt": "2026-07-13T06:35:00Z",
+		"note": "喜茶 · 芝芝莓莓",
+		"paymentMethod": "wechat",
+		"categoryId": 2,
+		"duplicate": false
+	},
+	{
+		"rowIndex": 3,
+		"amountCents": 400,
+		"direction": "expense",
+		"occurredAt": "2026-07-13T09:02:00Z",
+		"note": "地铁出行",
+		"paymentMethod": "wechat",
+		"categoryId": 3,
+		"duplicate": true
+	},
+	{
+		"rowIndex": 4,
+		"amountCents": 12900,
+		"direction": "expense",
+		"occurredAt": "2026-07-12T12:20:00Z",
+		"note": "优衣库 T恤",
+		"paymentMethod": "wechat",
+		"categoryId": 4,
+		"duplicate": false
+	},
+	{
+		"rowIndex": 5,
+		"amountCents": 9900,
+		"direction": "expense",
+		"occurredAt": "2026-07-11T11:30:00Z",
+		"note": "万达影城 电影票",
+		"paymentMethod": "wechat",
+		"categoryId": 5,
+		"duplicate": true
+	},
+	{
+		"rowIndex": 6,
+		"amountCents": 3580,
+		"direction": "expense",
+		"occurredAt": "2026-07-11T02:48:00Z",
+		"note": "美团买菜",
+		"paymentMethod": "wechat",
+		"categoryId": 6,
+		"duplicate": false
+	},
+	{
+		"rowIndex": 7,
+		"amountCents": 6800,
+		"direction": "expense",
+		"occurredAt": "2026-07-10T08:05:00Z",
+		"note": "同仁堂药店",
+		"paymentMethod": "wechat",
+		"categoryId": 7,
+		"duplicate": false
+	},
+	{
+		"rowIndex": 8,
+		"amountCents": 5000,
+		"direction": "income",
+		"occurredAt": "2026-07-10T13:40:00Z",
+		"note": "群红包",
+		"paymentMethod": "wechat",
+		"categoryId": 10,
+		"duplicate": false
+	},
+	{
+		"rowIndex": 9,
+		"amountCents": 2200,
+		"direction": "expense",
+		"occurredAt": "2026-07-09T05:15:00Z",
+		"note": "楼下面馆",
+		"paymentMethod": "wechat",
+		"categoryId": 1,
+		"duplicate": false
+	},
+	{
+		"rowIndex": 10,
+		"amountCents": 1990,
+		"direction": "expense",
+		"occurredAt": "2026-07-09T10:26:00Z",
+		"note": "便利店日用",
+		"paymentMethod": "wechat",
+		"categoryId": 8,
+		"duplicate": false
+	}
+]
