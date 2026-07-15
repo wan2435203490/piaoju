@@ -95,11 +95,17 @@ DoD：与 mock 的 401 refresh 流程联调通过
    客户端时钟慢会导致自己的改动永远推不上去（`web/src/lib/db/clock.ts` 据 pull 下发的
    服务端时间戳反推偏移并校正）。
 
-## Wave 5 — 打包 App（M4，≈1 周）
+## Wave 5 — 打包 App（M4）🟡 Android APK 能构建，未真机走查（commit `91cc55b`）
 
-- P1 Capacitor：android/ios 工程、Camera/Filesystem/StatusBar/SplashScreen 插件接入（拍票走原生相机）、图标启动图、签名、包体检查（APK < 6MB）
-- 主线程：真机走查 iOS 安全区/键盘遮挡/暗色，TestFlight
-- 卡点提醒：Apple 开发者账号 $99/年需提前申请
+- [x] Capacitor Android 工程 + Camera/StatusBar/SplashScreen 接入（拍票原生相机，Web 回退文件选择器）
+- [x] 矢量票根图标（adaptive icon，API 26+；无图像工具故未生成品牌 PNG，<26 回退默认图标）
+- [x] APK 构建通过：debug 8.1MB / release-unsigned **6.5MB（超 6MB 目标约 0.5MB）**
+- [ ] 真机走查（渲染/拍照/暗色/安全区/键盘）——APK 结构验过有效，但没在设备上跑过
+- [ ] App 后端连接（localhost 手机访问不到，需配 server.url 或部署）、release 签名、品牌 PNG 图标
+- [ ] iOS 工程（等 Apple 开发者账号 $99/年）
+- 环境坑：@capacitor/camera 要 **JDK 21**（非 17）、需补装 android-35 platform；详见 `docs/MOBILE.md`
+
+> 完整开发过程、踩坑、可靠性事故记录见 `docs/DEVLOG.md`。
 
 ## Wave 6 — 增强（M5）✅ 四项已交付（`faeda7a` + review 修复 `39d2e22`）
 
