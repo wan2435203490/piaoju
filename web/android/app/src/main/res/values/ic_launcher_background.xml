@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- design bg-Light 纸白（piaoju 品牌底色） -->
+    <color name="ic_launcher_background">#FAF6EF</color>
+</resources>

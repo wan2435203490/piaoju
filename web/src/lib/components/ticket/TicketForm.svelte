@@ -33,6 +33,7 @@
 	import Button from '$lib/components/Button.svelte';
 	import CategoryPicker from '$lib/components/CategoryPicker.svelte';
 	import { outbox } from '$lib/db/outbox';
+	import { capturePhoto } from '$lib/native/camera';
 	import { uuid } from '$lib/utils/uuid';
 	import Field from './Field.svelte';
 	import Rating from './Rating.svelte';
@@ -135,10 +136,8 @@
 	let uploading = $state(false);
 	let uploadError = $state('');
 
-	async function onFilesPicked(event: Event) {
-		const input = event.currentTarget as HTMLInputElement;
-		const files = [...(input.files ?? [])];
-		input.value = '';
+	/** 上传一批照片进附件（原生相机与文件选择器共用） */
+	async function addPhotoFiles(files: File[]) {
 		if (files.length === 0) return;
 		uploading = true;
 		uploadError = '';
@@ -151,6 +150,20 @@
 		} finally {
 			uploading = false;
 		}
+	}
+
+	function onFilesPicked(event: Event) {
+		const input = event.currentTarget as HTMLInputElement;
+		const files = [...(input.files ?? [])];
+		input.value = '';
+		void addPhotoFiles(files);
+	}
+
+	/** 加照片按钮：原生 App 先唤起系统相机；Web 或取消则回退文件选择器 */
+	async function onAddPhotoClick() {
+		const photo = await capturePhoto();
+		if (photo) void addPhotoFiles([photo]);
+		else fileInput?.click();
 	}
 
 	function removeAttachment(id: number) {
@@ -230,12 +243,9 @@
 		lowConfidence = draft.confidence < RECOGNIZE_CONFIDENCE_FLOOR;
 	}
 
-	async function onRecognizePicked(event: Event) {
-		const input = event.currentTarget as HTMLInputElement;
-		const file = input.files?.[0];
-		input.value = '';
-		if (!file || recognizing) return;
-
+	/** 识票主流程（原生相机与文件选择器共用） */
+	async function recognizeWithFile(file: File) {
+		if (recognizing) return;
 		recognizing = true;
 		recognizeError = '';
 		lowConfidence = false;
@@ -266,6 +276,20 @@
 		} finally {
 			recognizing = false;
 		}
+	}
+
+	function onRecognizePicked(event: Event) {
+		const input = event.currentTarget as HTMLInputElement;
+		const file = input.files?.[0];
+		input.value = '';
+		if (file) void recognizeWithFile(file);
+	}
+
+	/** 拍照识别按钮：原生 App 先唤起系统相机；Web 或取消则回退文件选择器 */
+	async function onRecognizeClick() {
+		const photo = await capturePhoto();
+		if (photo) void recognizeWithFile(photo);
+		else recognizeInput?.click();
 	}
 
 	/* ---------- 校验 + 提交 ---------- */
@@ -341,7 +365,7 @@
 					class="rec-btn"
 					disabled={recognizing || !online}
 					aria-busy={recognizing}
-					onclick={() => recognizeInput?.click()}
+					onclick={onRecognizeClick}
 				>
 					{#if recognizing}
 						<span class="rec-spin" aria-hidden="true"></span>识别中…
@@ -475,7 +499,7 @@
 				type="button"
 				class="photo-add"
 				disabled={uploading}
-				onclick={() => fileInput?.click()}
+				onclick={onAddPhotoClick}
 			>
 				{uploading ? '上传中…' : '＋ 添加'}
 			</button>

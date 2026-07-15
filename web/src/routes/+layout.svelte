@@ -2,12 +2,16 @@
 	import { onMount } from 'svelte';
 	import '../app.css';
 	import favicon from '$lib/assets/favicon.svg';
+	import { initNativeShell } from '$lib/native/shell';
 
 	let { children } = $props();
 
 	// 注册 Service Worker（app shell 缓存 → 断网也能打开；见 src/service-worker.ts）。
 	// dev 模式不注册：SW 会缓存住 HMR 资源，改代码看不到效果。
 	onMount(() => {
+		// 原生壳：状态栏配色 + 收起启动图（Web 环境 no-op，插件动态加载不进 web bundle）
+		void initNativeShell();
+
 		if (import.meta.env.DEV) return;
 		if (!('serviceWorker' in navigator)) return;
 		navigator.serviceWorker.register('/service-worker.js', { type: 'module' }).catch((err) => {

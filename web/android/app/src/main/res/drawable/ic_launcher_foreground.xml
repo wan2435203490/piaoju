@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  拾光票局 launcher 前景（矢量票根，Wave 5 P1）。
+  adaptive icon 108dp 画布；票根图形居中，四周留安全边。
+  纯 vector drawable：无需图像工具生成 PNG，任意分辨率清晰。
+  色值镜像 design token（app.css）：brand 赭橙 #C2410C、surface 白、line 纸线。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- 票根白卡（圆角矩形，居中，留安全区） -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:strokeColor="#E7E0D3"
+        android:strokeWidth="1.5"
+        android:pathData="M32,30 L76,30 A4,4 0 0 1 80,34 L80,74 A4,4 0 0 1 76,78 L32,78 A4,4 0 0 1 28,74 L28,34 A4,4 0 0 1 32,30 Z" />
+
+    <!-- 左缘票型色条（赭橙 --brand） -->
+    <path
+        android:fillColor="#C2410C"
+        android:pathData="M32,30 L37,30 L37,78 L32,78 A4,4 0 0 1 28,74 L28,34 A4,4 0 0 1 32,30 Z" />
+
+    <!-- 撕票线（虚线段，票根语言标志） -->
+    <path
+        android:fillColor="#E7E0D3"
+        android:pathData="M44,58 h5 v2 h-5 z M53,58 h5 v2 h-5 z M62,58 h5 v2 h-5 z M71,58 h5 v2 h-5 z" />
+
+    <!-- 撕票线两端半圆打孔缺口（用背景纸白挖出，模拟票根撕口） -->
+    <path
+        android:fillColor="#FAF6EF"
+        android:pathData="M28,59 m-3,0 a3,3 0 1 0 6,0 a3,3 0 1 0 -6,0 Z M80,59 m-3,0 a3,3 0 1 0 6,0 a3,3 0 1 0 -6,0 Z" />
+
+    <!-- 票面信息行（灰线，示意文字，上半区） -->
+    <path
+        android:fillColor="#78716C"
+        android:pathData="M44,40 h26 v3 h-26 z M44,47 h18 v2 h-18 z" />
+</vector>
